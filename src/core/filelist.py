@@ -65,12 +65,23 @@ class FileList():
         self.mdate_map.setdefault(f.mdate, [])
         self.mdate_map[f.mdate].append(f)
 
+    # Date time related methods
     def by_mdate(self, date: dt.date):
-        if date in self.mdate_map:
-            return self.__class__(filelist=self.mdate_map[date])
-        else:
-            print(f'Warning: given date {date} is not in current file list')
-            return self.__class__()
+        return self.by_mdates([date])
+
+    def by_mdates(self, dates: list[dt.date]):
+        
+        filelist = []
+        for mdate in dates:
+            if mdate in self.mdate_map:
+                filelist += self.mdate_map[mdate]
+            else:
+                print(f'Warning: found no file on the given date {mdate}')
+
+        if not filelist:
+           print('Found no file on the given list of dates')
+
+        return self.__class__(filelist=filelist)
 
     @property
     def mdates(self):
@@ -83,14 +94,21 @@ class FileList():
         else:
             print(f"Didn't found any files with modified time as of date {today}")
 
+    def last_days(self, days=5):
+        """Return the files from last X existing days"""
+        return self.by_mdates(self.mdates[-days:])
+
+    def first_days(self, days=5):
+        """Return the files from first X existing days"""
+        return self.by_mdates(self.mdates[:days])
+
     def recent(self, days=5):
+        """Return the files from last X days from today"""
         today = dt.datetime.today().date()
         recent_days = [today - dt.timedelta(days=day) for day in range(days+1)]
-        filelist = []
-        for mdate in recent_days:
-            filelist += self.mdate_map[mdate]
-        return self.__class__(filelist=filelist)
+        return self.by_mdates(recent_days)
 
+    # File opening related methods
     @classmethod
     def _popen(cls, cmd):
         p = sp.Popen(cmd, stdout=sp.DEVNULL, stderr=sp.DEVNULL)
