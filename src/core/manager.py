@@ -157,11 +157,15 @@ class Manager():
             pathlist = list(filter(os.path.isfile, pathlist))
         else:
             pathlist = []
-            for (root, _, files) in os.walk('.'):
+            for (root, dirs, files) in os.walk('.', topdown=True):
                 root = os.path.relpath(root, '.')
-                if root.startswith('#') or root.startswith('.'):
-                    continue
+
+                # Prune the dirs
+                dirs[:] = [d for d in dirs if not (d.startswith('#') or d.startswith('.'))]
+                if root == '.':  # root is current
+                    pathlist += files
                 else:
+                    assert not (root.startswith('#') and root.startswith('.'))
                     pathlist += [os.path.join(root, f) for f in files]
         
         ret = []
