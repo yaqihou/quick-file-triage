@@ -1,13 +1,14 @@
 
 from core.manager import Manager
+from core.enums import SortAttr
 
 manager = Manager(
-    folder= '/mnt/tmp2/',
+    folder='/media/yaqi/red2/',  # '/mnt/tmp2/',
     recursive=True,
     video_probe_on=True,
     image_probe_on=True)
-# manager.organize(dry_run=True)
-manager.summary()
+# manager.organize(dry_run=False)
+# manager.summary()
 # manager.save()
 
-# manager.images.open(top=200)
+# manager.videos.exlongs.open()

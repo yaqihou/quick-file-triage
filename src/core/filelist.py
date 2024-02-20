@@ -7,9 +7,9 @@ from termcolor import colored
 import subprocess as sp
 from tabulate import SEPARATING_LINE, tabulate
 
-from .enums import Category, ImageOrientation, ImageType, VideoOrientation, VideoLengthType
+from .enums import Category, ImageOrientation, ImageType, SortAttr, VideoOrientation, VideoLengthType
 from .files import File, ImageFile, VideoFile
-from .utils import get_readable_filesize, parse_sec_to_str
+from .utils import MinType, get_readable_filesize, parse_sec_to_str
 
 # TODO - support general query search
 # TODO - add random play support for open
@@ -27,7 +27,7 @@ class FileList():
         self.filelist: list[File] = []
         self.mdate_map: dict[dt.date, list[File]] = {}
 
-        for f in sorted(filelist, key=lambda f: f.name):
+        for f in filelist:
             self.add_file(f)
 
     def to_dict(self):
@@ -280,8 +280,14 @@ class FileList():
 
         return data_dict, total_dict
 
-    def sort(self, attr='time'):
-        self.filelist.sort(key=lambda f: f.__getattribute__(attr))
+    def sort(self, attr:SortAttr = SortAttr.NAME):
+        def sorter(f):
+            if not hasattr(f, attr.value):
+                return MinType()
+            else:
+                return getattr(f, attr.value)
+        self.filelist.sort(key=sorter)
+        return self
 
 
 class VideoFileList(FileList):

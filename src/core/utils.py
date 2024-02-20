@@ -1,4 +1,6 @@
 
+from functools import total_ordering
+
 def need_confirm(msg="Need confirm to continue"):
     def decorator(func):
         def wrapped(*args, **kwargs):
@@ -33,3 +35,13 @@ def parse_sec_to_str(s):
     m = int(s // 60)
     s = int(s % 60)
     return f'{h:02d}:{m:02d}:{s:02d}'
+
+
+@total_ordering
+class MinType(object):
+    """Used to compare when attribute is missing during sort"""
+    def __le__(self, other):
+        return True
+
+    def __eq__(self, other):
+        return (self is other)
