@@ -10,15 +10,6 @@ from .enums import Category, ImageOrientation, ImageType, VideoOrientation, Vide
 from .files import File, ImageFile, VideoFile
 from .utils import get_readable_filesize
 
-FILE_FACTORY = {
-    Category.VIDEO : VideoFile,
-    Category.IMAGE : File,
-    Category.AUDIO : File,
-    Category.TXT : File,
-    Category.ZIP : File,
-    Category.NA : File
-}
-
 
 class FileList():
 
@@ -428,8 +419,8 @@ class ImageFileList(FileList):
             ["", "Portrait", "Landscape", "Unknown Ratio", "Sum"],
             ["Illustration", 0, 0, 0, 0],
             ["Photo", 0, 0, 0, 0],
-            ["Uncentrain", 0, 0, 0, 0],
-            ["Unknown Length", 0, 0, 0, 0],
+            ["Uncertain", 0, 0, 0, 0],
+            ["Type Not Set", 0, 0, 0, 0],
             ["Sum", 0, 0, 0, 0]]
 
         row_map = {

@@ -17,6 +17,8 @@ from .filelist import VideoFileList, ImageFileList, AudioFileList, TXTFileList, 
 
 CACHE_PKL = os.path.join(os.environ['HOME'], '.cache', 'my-file-organizer', 'cache.pkl')
 
+# TODO - the probe could be put into a later stage (after creating the file list)
+
 class Manager():
 
     cache: dict[str, File] = {}
