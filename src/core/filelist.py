@@ -105,8 +105,6 @@ class FileList():
             os.makedirs(folder)
 
     def move_to(self, dst_folder, verbose=True, dry_run=False):
-        self._prepare_dir(dst_folder)
-
         existed_file_list = []
         to_move_list = []
         for f in self.filelist:
@@ -143,6 +141,8 @@ class FileList():
                 exit()
 
         if to_move_list:
+            self._prepare_dir(dst_folder)
+
             for f, dst in tqdm(to_move_list, desc=f"{self.category} moving"):
                 f.move(dst, dry_run=dry_run, verbose=verbose)
 
