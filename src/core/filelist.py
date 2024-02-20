@@ -50,6 +50,7 @@ class FileList():
     def __len__(self):
         return len(self.filelist)
 
+    @property
     def len(self):
         return self.__len__()
 
