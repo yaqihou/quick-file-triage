@@ -115,10 +115,16 @@ class Manager():
         for fl in self.data.values():
             fl.organize(verbose=verbose, dry_run=dry_run)
 
+        if not dry_run:
+            self.save()
+
     @need_confirm('Are you sure to move all files to a single folder?')
     def move_all_to(self, dst_folder, verbose=True, dry_run=False):
         for fl in self.data.values():
             fl.move_to(dst_folder, verbose=True, dry_run=False)
+
+        if not dry_run:
+            self.save()
 
     @property
     def mdates(self):
