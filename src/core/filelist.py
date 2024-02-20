@@ -286,6 +286,13 @@ class FileList():
 
         return data_dict, total_dict
 
+    # two alias to details()
+    def list(self):
+        return self.details()
+
+    def ls(self):
+        return self.details()
+
     def sort(self, attr:SortAttr = SortAttr.NAME):
         def sorter(f):
             if not hasattr(f, attr.value):
