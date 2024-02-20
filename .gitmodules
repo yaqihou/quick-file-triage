@@ -1,0 +1,3 @@
+[submodule "src/anime-or-not"]
+	path = src/core/anime_or_not
+	url = https://github.com/LaihoE/Anime-or-not.git
