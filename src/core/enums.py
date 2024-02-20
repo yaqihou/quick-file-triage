@@ -44,7 +44,7 @@ class ImageOrientation(Enum):
 
 class ImageType(Enum):
 
-    ILLUST = 'Illustration'
-    PHOTO = 'Photo'
-    NOTSURE = 'NotSure'
-    NA = ''
+    ILLUST = '@illustration'
+    PHOTO = '@photo'
+    NOTSURE = '@uncertain'
+    NA = '@notset'

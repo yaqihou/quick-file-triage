@@ -403,8 +403,11 @@ class ImageFileList(FileList):
     def _organize(self, verbose, dry_run):
 
         for mdate in self.mdates:
-            dst_folder = os.path.join(self._target_folder, str(mdate))
-            self.by_mdate(mdate).move_to(dst_folder, verbose=verbose, dry_run=dry_run)
+            for image_type in ImageType:
+                dst_folder = os.path.join(self._target_folder, image_type.value, str(mdate))
+                self.by_mdate(mdate)\
+                    .by_image_type(image_type)\
+                    .move_to(dst_folder, verbose=verbose, dry_run=dry_run)
         
     def add_file(self, f: ImageFile):
         super().add_file(f)
