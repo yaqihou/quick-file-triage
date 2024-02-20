@@ -83,6 +83,14 @@ class FileList():
         else:
             print(f"Didn't found any files with modified time as of date {today}")
 
+    def recent(self, days=5):
+        today = dt.datetime.today().date()
+        recent_days = [today - dt.timedelta(days=day) for day in range(days+1)]
+        filelist = []
+        for mdate in recent_days:
+            filelist += self.mdate_map[mdate]
+        return self.__class__(filelist=filelist)
+
     @classmethod
     def _popen(cls, cmd):
         p = sp.Popen(cmd, stdout=sp.DEVNULL, stderr=sp.DEVNULL)
