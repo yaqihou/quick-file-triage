@@ -5,12 +5,14 @@ import datetime as dt
 from tqdm import tqdm
 from termcolor import colored
 import subprocess as sp
-from tabulate import tabulate
+from tabulate import SEPARATING_LINE, tabulate
 
 from .enums import Category, ImageOrientation, ImageType, VideoOrientation, VideoLengthType
 from .files import File, ImageFile, VideoFile
-from .utils import get_readable_filesize
+from .utils import get_readable_filesize, parse_sec_to_str
 
+# TODO - support general query search
+# TODO - add random play support for open
 
 class FileList():
 
@@ -145,6 +147,8 @@ class FileList():
         if random:  shuffle(_lst)
         return _lst
 
+    # File move / organize related methods
+
     def _get_dst(self, f: File, dst_folder: str):
         return os.path.join(dst_folder, f.name)
 
@@ -223,17 +227,61 @@ class FileList():
 
         return os.path.join(folder, f"{base}-{suffix}{ext}")
 
+    # Content (stats) show related methods
     def summary(self):
         print(f"{self.category} file counts: {len(self.filelist)}")
 
-    def details(self, show_path=False):
+    def details(self, show_path=False, color=True):
+
+        data_dict, total_dict = self._get_details_to_show(show_path=show_path, color=color)
+
+        header = list(data_dict.keys())
+        data = []
+
+        for idx in range(len(data_dict[header[0]])):
+            row = [data_dict[col][idx] for col in header]
+            data.append(row)
+
+        # Add total summary
+        data.append(SEPARATING_LINE)
+        data.append([total_dict.get(col, '') for col in header])
+
+
+        print(tabulate(data, headers=header))
+
+    def _get_details_to_show(self, show_path, color):
+        data_dict = {
+            'Filename': [],
+            'Size': [],
+            'Date': []
+        }
+
+        total_dict = {
+            'Filename': f"Total {self.len} files",
+            'Size': get_readable_filesize(sum(f.size for f in self.filelist))
+        }
+        
+        if show_path:  data_dict['Path'] = []
 
         for f in self.filelist:
-            _path_str = f" ({f.path})" if show_path else ""
-            print(f'    - {colored(f.name, "green")}{colored(_path_str, "yellow")}')
+            data_dict['Filename'].append(
+                f.name if not color else colored(f.name, 'green')
+            )
 
-        print('=' * 40)
-        self.summary()
+            _fsize = get_readable_filesize(f.size)
+            data_dict['Size'].append(
+                _fsize if not color else colored(_fsize, 'yellow')
+            )
+
+            data_dict['Date'].append(
+                str(f.mdate) if not color else colored(str(f.mdate), 'blue')
+            )
+            if show_path:  data_dict['Path'].append(f.path)
+
+        return data_dict, total_dict
+
+    def sort(self, attr='time'):
+        self.filelist.sort(key=lambda f: f.__getattribute__(attr))
 
 
 class VideoFileList(FileList):
@@ -389,7 +437,26 @@ class VideoFileList(FileList):
 
         print(tabulate(summary_table))
 
-        
+    def _get_details_to_show(self, show_path, color):
+        data_dict, total_dict = super()._get_details_to_show(show_path, color)
+
+        data_dict['Duration'] = []
+        data_dict['Height'] = []
+        data_dict['Width'] = []
+        data_dict['Port/Land'] = []
+        for f in self.filelist:
+            data_dict['Height'].append(f.height if f.height else "")
+            data_dict['Width'].append(f.width if f.width else "")
+            data_dict['Duration'].append(parse_sec_to_str(f.duration) if f.duration else "")
+            data_dict['Port/Land'].append(f.orientation.value)
+
+        total_dict['Duration'] = parse_sec_to_str(sum(
+            f.duration if f.duration else 0
+            for f in self.filelist
+        ))
+
+        return data_dict, total_dict
+
 
 class AudioFileList(FileList):
 
@@ -528,6 +595,21 @@ class ImageFileList(FileList):
            summary_table[-1][-1] += 1
 
         print(tabulate(summary_table))
+
+    def _get_details_to_show(self, show_path, color):
+        data_dict, total_dict = super()._get_details_to_show(show_path, color)
+
+        data_dict['Height'] = []
+        data_dict['Width'] = []
+        data_dict['Port/Land'] = []
+        data_dict['Image Type'] = []
+        for f in self.filelist:
+            data_dict['Height'].append(f.height if f.height else "")
+            data_dict['Width'].append(f.width if f.width else "")
+            data_dict['Port/Land'].append(f.orientation.value)
+            data_dict['Image Type'].append(f.image_type.name if f.image_type is not ImageType.NA else "")
+
+        return data_dict, total_dict
 
 class TXTFileList(FileList):
 

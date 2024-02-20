@@ -25,3 +25,11 @@ def get_readable_filesize(fsize):
         return '#N/A'
     else:
         return f"{fsize:6.2f} {unit}"
+
+def parse_sec_to_str(s):
+    h = int(s // 3600)
+    s = s % 3600
+
+    m = int(s // 60)
+    s = int(s % 60)
+    return f'{h:02d}:{m:02d}:{s:02d}'

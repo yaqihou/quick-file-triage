@@ -122,15 +122,6 @@ class VideoFile(File):
                 return ret
         return None
 
-    @staticmethod
-    def _get_sec_str(s):
-        h = int(s // 3600)
-        s = s % 3600
-
-        m = int(s // 60)
-        s = int(s % 60)
-        return f'{h:02d}:{m:02d}:{s:02d}'
-
     def _set_orientation(self):
 
         if self.height is None or self.width is None:
