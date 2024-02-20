@@ -17,7 +17,7 @@ from .utils import MinType, get_readable_filesize, parse_sec_to_str
 class FileList():
 
     _category: Category | None = None
-    _play_cmd: list | None = None
+    _open_file_cmd_lst: list[str] = []
     _target_folder: str = "@uncatgorized"
 
     process_list: list[sp.Popen] = []
@@ -134,9 +134,15 @@ class FileList():
     def open(self,
              top: None | int = None,
              random: bool = False,
+             *,
+             path_lst: None | list[str] = None,
              **kwargs):
         """Open first <top> / all files in default app"""
-        raise NotImplementedError(f'Open all is not implemented for files of {self.category} type ')
+        if self._open_file_cmd_lst:
+            self._open(self._open_file_cmd_lst, top=top, random=random, path_lst=path_lst)
+        else:
+            raise NotImplementedError(f'Open file command not defined for class {self.__class__}')
+                
 
     def _get_pathlist_to_open(
             self,
@@ -294,6 +300,7 @@ class VideoFileList(FileList):
 
     _category = Category.VIDEO
     _target_folder = "@video"
+    _open_file_cmd_lst = ['vlc', '--']
 
     def __init__(self, filelist: list[VideoFile] = []):
         self.orientation_map: dict[VideoOrientation, list[VideoFile]] = {
@@ -339,9 +346,9 @@ class VideoFileList(FileList):
         return self.by_orientation(VideoOrientation.NA)
 
     def open(self,
-             top: None | int = None,
              orientation: None | VideoOrientation = None,
              length_type: None | VideoLengthType = None,
+             top: None | int = None,
              random: bool = False,
              *,
              path_lst: None | list[str] = None
@@ -349,8 +356,7 @@ class VideoFileList(FileList):
         """Open first <top> / all files in default app"""
 
         if orientation is None and length_type is None:
-            cmd_lst = ['vlc', '--']
-            self._open(cmd_lst, top=top, random=random, path_lst=path_lst)
+            super().open(top=top, random=random, path_lst=path_lst)
         elif orientation is None and length_type is not None:
             self.by_length_type(length_type)\
                 .open(top=top, random=random, path_lst=path_lst)
@@ -468,22 +474,14 @@ class AudioFileList(FileList):
 
     _category = Category.AUDIO
     _target_folder = "@audio"
+    _open_file_cmd_lst = ['vlc', '--']
 
-    def open(self,
-             top: None | int = None,
-             random: bool = False,
-             *,
-             path_lst: None | list[str] = None
-             ):
-        """Open first <top> / all files in default app"""
-        cmd_lst = ['vlc', '--']
-        self._open(cmd_lst, top=top, random=random, path_lst=path_lst)
-    pass
 
 class ImageFileList(FileList):
 
     _category = Category.IMAGE
     _target_folder = '@image'
+    _open_file_cmd_lst = ['feh', '-g', '1680x1050', '--scale-down', '--auto-zoom']
 
     def __init__(self, filelist: list[ImageFile] = []):
         self.orientation_map: dict[ImageOrientation, list[ImageFile]] = {
@@ -521,9 +519,9 @@ class ImageFileList(FileList):
         return self.by_orientation(ImageOrientation.NA)
 
     def open(self,
-             top: None | int = None,
              orientation: None | ImageOrientation = None,
              image_type: None | ImageType = None,
+             top: None | int = None,
              random: bool = False,
              *,
              path_lst: None | list[str] = None
@@ -531,8 +529,7 @@ class ImageFileList(FileList):
         """Open first <top> / all files in default app"""
         
         if orientation is None and image_type is None:
-            cmd_lst = ['feh', '-g', '1680x1050', '--scale-down', '--auto-zoom']
-            self._open(cmd_lst, top=top, random=random, path_lst=path_lst)
+            super().open(top=top, random=random, path_lst=path_lst)
         elif orientation is None and image_type is not None:
             self.by_image_type(image_type)\
                 .open(top=top, random=random, path_lst=path_lst)
