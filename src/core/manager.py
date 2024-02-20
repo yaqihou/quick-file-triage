@@ -149,11 +149,11 @@ class Manager():
     def _to_namelist(self, filelist: list[File]) -> list[str]:
         return [f.name for f in filelist]
 
-    def play_all_video(self):
-        self.data[Category.VIDEO].open()
+    def play_all_video(self, random=False):
+        self.data[Category.VIDEO].open(random=random)
 
-    def play_all_image(self):
-        self.data[Category.IMAGE].open()
+    def play_all_image(self, random=False):
+        self.data[Category.IMAGE].open(random=random)
             
     def load(self, video_probe_on=True, image_probe_on=True, recursive=False, use_cache=True):
 

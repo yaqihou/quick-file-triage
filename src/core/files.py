@@ -76,7 +76,7 @@ class VideoFile(File):
         try:
             probe = ffmpeg.probe(self.path)
         except:
-            print(f'Warning: failed to probe the information of file'
+            print(f'Warning: failed to probe the information of video'
                   f' {colored(self.path, "yellow")}')
             self.broken = True
         else:
@@ -172,7 +172,7 @@ class ImageFile(File):
         try:
             prob, width, height = analysis_image(self.path)
         except:
-            print(f'Warning: failed to probe the information of file'
+            print(f'Warning: failed to probe the information of image'
                   f' {colored(self.path, "yellow")}')
         else:
             # NOTE - prob is in percentage

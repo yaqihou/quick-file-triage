@@ -1,5 +1,6 @@
 
 import os
+from random import shuffle
 import datetime as dt
 from tqdm import tqdm
 from termcolor import colored
@@ -75,14 +76,48 @@ class FileList():
     def mdates(self):
         return list(sorted(list(self.mdate_map.keys())))
 
+    def today(self):
+        today = dt.datetime.today().date()
+        if today in self.mdate_map:
+            return self.by_mdate(today)
+        else:
+            print(f"Didn't found any files with modified time as of date {today}")
+
     @classmethod
     def _popen(cls, cmd):
         p = sp.Popen(cmd, stdout=sp.DEVNULL, stderr=sp.DEVNULL)
         FileList.process_list.append(p)
 
-    def open(self, *args, top: None | int = None, **kwargs):
+    def _open(self,
+              cmd_lst: list[str],
+              top: None | int = None,
+              random: bool = False,
+              *,
+              path_lst: None | list[str] = None
+              ):
+        if path_lst is None:
+            _path_lst = self._get_pathlist_to_open(top=top, random=random)
+        else:
+            _path_lst = path_lst
+        print(path_lst)
+        cmd = cmd_lst + _path_lst
+        FileList._popen(cmd)
+        
+    def open(self,
+             top: None | int = None,
+             random: bool = False,
+             **kwargs):
         """Open first <top> / all files in default app"""
         raise NotImplementedError(f'Open all is not implemented for files of {self.category} type ')
+
+    def _get_pathlist_to_open(
+            self,
+            top: None | int = None,
+            random: bool = False
+    ) -> list[str]:
+        _lst = list(self.path_iter())[:top]
+        if random:  shuffle(_lst)
+        return _lst
 
     def _get_dst(self, f: File, dst_folder: str):
         return os.path.join(dst_folder, f.name)
@@ -226,21 +261,28 @@ class VideoFileList(FileList):
     def open(self,
              top: None | int = None,
              orientation: None | VideoOrientation = None,
-             length_type: None | VideoLengthType = None
+             length_type: None | VideoLengthType = None,
+             random: bool = False,
+             *,
+             path_lst: None | list[str] = None
              ):
         """Open first <top> / all files in default app"""
 
         if orientation is None and length_type is None:
-            cmd = ['vlc', '--'] + list(self.path_iter())[:top]
-            FileList._popen(cmd)
+            cmd_lst = ['vlc', '--']
+            self._open(cmd_lst, top=top, random=random, path_lst=path_lst)
         elif orientation is None and length_type is not None:
-            self.by_length_type(length_type).open(top=top)
+            self.by_length_type(length_type)\
+                .open(top=top, random=random, path_lst=path_lst)
         elif orientation is not None and length_type is None:
-            self.by_orientation(orientation).open(top=top)
+            self.by_orientation(orientation)\
+                .open(top=top, random=random, path_lst=path_lst)
+        elif orientation is not None and length_type is not None:
+            self.by_length_type(length_type)\
+                .by_orientation(orientation)\
+                .open(top=top, random=random, path_lst=path_lst)
         else:
-            assert length_type is not None
-            assert orientation is not None
-            self.by_length_type(length_type).by_orientation(orientation).open(top=top)
+            raise ValueError('Something wrong with the input')
 
 
     def add_file(self, f: VideoFile):
@@ -328,11 +370,15 @@ class AudioFileList(FileList):
     _category = Category.AUDIO
     _target_folder = "@audio"
 
-    def open(self, top: None | int = None):
+    def open(self,
+             top: None | int = None,
+             random: bool = False,
+             *,
+             path_lst: None | list[str] = None
+             ):
         """Open first <top> / all files in default app"""
-        cmd = ['vlc', '--'] + list(self.path_iter())[:top]
-        FileList._popen(cmd)
-
+        cmd_lst = ['vlc', '--']
+        self._open(cmd_lst, top=top, random=random, path_lst=path_lst)
     pass
 
 class ImageFileList(FileList):
@@ -378,21 +424,30 @@ class ImageFileList(FileList):
     def open(self,
              top: None | int = None,
              orientation: None | ImageOrientation = None,
-             image_type: None | ImageType = None
+             image_type: None | ImageType = None,
+             random: bool = False,
+             *,
+             path_lst: None | list[str] = None
              ):
         """Open first <top> / all files in default app"""
         
         if orientation is None and image_type is None:
-            cmd = ['feh', '-g', '1680x1050', '--scale-down', '--auto-zoom'] + list(self.path_iter())[:top]
-            FileList._popen(cmd)
+            cmd_lst = ['feh', '-g', '1680x1050', '--scale-down', '--auto-zoom']
+            self._open(cmd_lst, top=top, random=random, path_lst=path_lst)
         elif orientation is None and image_type is not None:
-            self.by_image_type(image_type).open(top=top)
+            self.by_image_type(image_type)\
+                .open(top=top, random=random, path_lst=path_lst)
         elif orientation is not None and image_type is None:
-            self.by_orientation(orientation).open(top=top)
+            self.by_orientation(orientation)\
+                .open(top=top, random=random, path_lst=path_lst)
+        elif orientation is not None and image_type is not None:
+            self.by_image_type(image_type)\
+                .by_orientation(orientation)\
+                .open(top=top, random=random, path_lst=path_lst)
         else:
-            self.by_image_type(image_type).by_orientation(orientation).open(top=top)
+            raise ValueError('Something wrong with the input')
 
-    def _organize(self, verbose, dry_run):
+    def _organize(self, verbose: bool, dry_run: bool):
 
         for mdate in self.mdates:
             for image_type in ImageType:
