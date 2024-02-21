@@ -31,7 +31,7 @@ class FileList():
             self.add_file(f)
 
     def to_dict(self):
-        return {f.path: f for f in self.filelist}
+        return {f.path: f.to_dict() for f in self.filelist}
 
     @property
     def category(self):
@@ -57,11 +57,23 @@ class FileList():
     def len(self):
         return self.__len__()
 
-    # TODO
-    def add_from_path(self, path):
-        pass
+    def add_file(self, path_or_file: str | File, **kwargs):
 
-    def add_file(self, f: File):
+        if isinstance(path_or_file, str):
+            if os.path.isfile(path_or_file):
+                f = File(path_or_file, **kwargs)
+            else:
+                raise ValueError(f"Given path {path_or_file} doesn't exist")
+
+        elif isinstance(path_or_file, File):
+            f = path_or_file
+
+        else:
+            raise ValueError(f'Given input {path_or_file} should be a path str or File instance')
+
+        self._add_file(f)
+
+    def _add_file(self, f: File):
         self.filelist.append(f)
 
         self.mdate_map.setdefault(f.mdate, [])
@@ -378,16 +390,16 @@ class VideoFileList(FileList):
             raise ValueError('Something wrong with the input')
 
 
-    def add_file(self, f: VideoFile):
+    def _add_file(self, f: VideoFile):
 
         if f.probe_on and f.broken:
             _folder = '@broken-videos'
             self._prepare_dir(_folder)
             dst = self.get_uniq_dst(os.path.join(_folder, f.name))
             f.move(os.path.join(dst))
-        else:
 
-            super().add_file(f)
+        else:
+            super()._add_file(f)
             self.orientation_map[f.orientation].append(f)
             self.length_type_map[f.length_type].append(f)
 
@@ -559,8 +571,8 @@ class ImageFileList(FileList):
                     .by_image_type(image_type)\
                     .move_to(dst_folder, verbose=verbose, dry_run=dry_run)
         
-    def add_file(self, f: ImageFile):
-        super().add_file(f)
+    def _add_file(self, f: ImageFile):
+        super()._add_file(f)
         self.orientation_map[f.orientation].append(f)
         self.image_type_map[f.image_type].append(f)
 

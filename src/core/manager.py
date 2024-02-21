@@ -1,6 +1,5 @@
 #!/usr/bin/python3
 
-# TODO - Add random play
 # TODO - Add GUI / interface
 
 import os
@@ -12,12 +11,15 @@ from termcolor import colored
 
 from .utils import need_confirm
 from .enums import Category
-from .files import File, VideoFile, ImageFile
+from .files import File, FileFactory, VideoFile, ImageFile
 from .filelist import VideoFileList, ImageFileList, AudioFileList, TXTFileList, ZIPFileList, FileList
 
 CACHE_PKL = os.path.join(os.environ['HOME'], '.cache', 'my-file-organizer', 'cache.pkl')
 
 # TODO - the probe could be put into a later stage (after creating the file list)
+# TODO - allow using cache by basename
+# TODO - refactor the cache: save all data in native data structure
+# TODO - add fast mode, i.e. don't walk through the real filelist but using the cached dict
 
 class Manager():
 
@@ -25,6 +27,7 @@ class Manager():
     if os.path.isfile(CACHE_PKL):
         with open(CACHE_PKL, 'rb') as f:
             cache = pickle.load(f)
+            print(f'Loaded {len(cache)} cached entries')
 
     def __init__(self, *,
                  folder: str | None = None,
@@ -45,13 +48,17 @@ class Manager():
         folder = os.path.abspath(folder)
         os.chdir(folder)
         print('Chaning current working directory to', colored(folder, 'green'))
+
+        self.cat_options = {
+                Category.VIDEO: {'probe_on': video_probe_on},
+                Category.IMAGE: {'probe_on': image_probe_on},
+                Category.AUDIO: {},  # TODO add support to audio, should be parent class to Video
+                Category.TXT: {},
+                Category.ZIP: {},
+                Category.NA: {}
+        }
         
         if managed_data is None:
-            filelist = self.load(
-                video_probe_on=video_probe_on,
-                image_probe_on=image_probe_on,
-                recursive=recursive,
-                use_cache=use_cache)
             self.data = {
                 Category.VIDEO: VideoFileList(),
                 Category.IMAGE: ImageFileList(),
@@ -60,9 +67,11 @@ class Manager():
                 Category.ZIP: ZIPFileList(),
                 Category.NA: FileList()
             }
-
-            for f in filelist:
-                self.data[f.cat].add_file(f)
+            self.load(
+                video_probe_on=video_probe_on,
+                image_probe_on=image_probe_on,
+                recursive=recursive,
+                use_cache=use_cache)
         else:
             self.data = managed_data
 
@@ -116,7 +125,7 @@ class Manager():
             fl.organize(verbose=verbose, dry_run=dry_run)
 
         if not dry_run:
-            self.save()
+            self.save_cache()
 
     @need_confirm('Are you sure to move all files to a single folder?')
     def move_all_to(self, dst_folder, verbose=True, dry_run=False):
@@ -124,7 +133,7 @@ class Manager():
             fl.move_to(dst_folder, verbose=True, dry_run=False)
 
         if not dry_run:
-            self.save()
+            self.save_cache()
 
     @property
     def mdates(self):
@@ -174,28 +183,33 @@ class Manager():
                     assert not (root.startswith('#') and root.startswith('.'))
                     pathlist += [os.path.join(root, f) for f in files]
         
-        ret = []
         for path in tqdm(pathlist, desc="Loading files"):
             cat = Category.infer(os.path.basename(path))
 
             if not use_cache or path not in self.cache:
-                # TODO - use the interface from FileList class
-                if cat == Category.VIDEO:
-                    ret.append(VideoFile(path, probe_on=video_probe_on))
-                elif cat == Category.IMAGE: 
-                    ret.append(ImageFile(path, probe_on=image_probe_on))
-                else:
-                    ret.append(File(path))
+                self.add_file(path, cat)
             else:
-                ret.append(self.cache[path])
-        return ret
+                f = FileFactory.get(cat).from_dict(self.cache[path])
+                self.add_file(f, cat)
+        return 
 
-    def save(self):
+    def add_file(self, path_or_file, cat, **kwargs):
+        if not kwargs:
+            kwargs = self.cat_options[cat]
+
+        self.data[cat].add_file(path_or_file, **kwargs)
+
+    def save_cache(self):
         """Save file list, the path is used as key"""
         _dict = {}
         for fl in self.data.values():
             _dict.update(fl.to_dict())
-        self.cache = _dict
+
+        _dup_keys = _dict.keys() & self.cache.keys()
+        for _key in _dup_keys:
+            if _dict[_key] != self.cache[_key]:
+                print(f"Found conflicting cache key: {_key}")
+        self.cache.update(_dict)
 
         folder = os.path.dirname(CACHE_PKL)
         os.makedirs(folder, exist_ok=True)

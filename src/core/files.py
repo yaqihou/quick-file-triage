@@ -2,26 +2,47 @@
 import os
 import ffmpeg
 import datetime as dt
-from dataclasses import dataclass
 from termcolor import colored
 
 from .enums import Category, VideoLengthType, VideoOrientation, ImageOrientation, ImageType
 from .anime_or_not.anime_or_not import analysis_image
 
-@dataclass
+# TODO - modify the anime_or_not to support 4-channel (alpha) PNG files
+
 class File():
 
-    path: str
-    probe_on: bool = False
+    def __init__(
+            self,
+            path: str,
+            probe_on: bool = False,
+            preassigned_attrs = {}
+    ):
 
-    def __post_init__(self):
+        self.path: str = path
+        self.probe_on: bool = probe_on
+
+        self.name: str
+        self.cat: Category 
+
+        self.mtime: dt.datetime
+        self.mdate: dt.date 
+        self.size: float 
+
+        if not preassigned_attrs:
+            self._setup_attr()
+        else:
+            for attr, val in preassigned_attrs.items():
+                setattr(self, attr, val)
+
+    def _setup_attr(self):
+
         self.name: str = os.path.basename(self.path)
         self.cat: Category = Category.infer(self.name)
 
         _fstat = os.stat(self.path) 
-        self.mtime = dt.datetime.fromtimestamp(_fstat.st_mtime)
-        self.mdate = self.mtime.date()
-        self.size = _fstat.st_size
+        self.mtime: dt.datetime = dt.datetime.fromtimestamp(_fstat.st_mtime)
+        self.mdate: dt.date = self.mtime.date()
+        self.size: float = _fstat.st_size 
     
     def update_path(self, new_path):
         self.path = new_path
@@ -42,21 +63,20 @@ class File():
                 and (self.size == other.size)
                 )
 
+    def to_dict(self):
+        """Store attribute in form of dictionary for pickling"""
+        # return {attr: getattr(self, attr) for attr in self._attr_register}
+        return {**self.__dict__}
 
-@dataclass
+    @classmethod
+    def from_dict(cls, prop_dict):
+        path = prop_dict['path']
+        probe_on = prop_dict['probe_on']
+        other_fields = {k: v for k, v in prop_dict.items()
+                        if k not in ['path', 'probe_on']}
+        return cls(path, probe_on, other_fields)
+
 class VideoFile(File):
-
-    probe_on: bool = True
-
-    height: None | int = None
-    width: None | int = None
-    duration: None | float = None
-
-    length_type: VideoLengthType = VideoLengthType.NA
-    orientation: VideoOrientation = VideoOrientation.NA
-
-    # TODO - add suppot to move "possible" broken files to somewhere
-    broken: bool = False
 
     duration_def = [
         ((0, 300), VideoLengthType.S),  # < 5m
@@ -65,11 +85,36 @@ class VideoFile(File):
         ((3600, 3600000), VideoLengthType.XL),  # 60m <= 
     ]
 
-    def __post_init__(self):
-        super().__post_init__()
+    def __init__(self, path: str, probe_on: bool = False,
+                 preassigned_attrs = {}
+                 ):
+        self.height: None | int
+        self.width: None | int
+        self.duration: None | float
+
+        self.length_type: VideoLengthType
+        self.orientation: VideoOrientation
+
+        self.broken: bool = False
+
+        super().__init__(path, probe_on, preassigned_attrs=preassigned_attrs)
+
+
+    def _setup_attr(self):
+        super()._setup_attr()
+
+        self.height = None
+        self.width = None
+        self.duration = None
+
+        self.length_type = VideoLengthType.NA
+        self.orientation = VideoOrientation.NA
+
+        self.broken: bool = False
 
         if self.probe_on:
             self._probe()
+        
         
     def _probe(self):
         """Populate the video metadata fields"""
@@ -140,20 +185,29 @@ class VideoFile(File):
                     return
 
 
-@dataclass
 class ImageFile(File):
 
-    probe_on: bool = True
+    def __init__(self, path: str, probe_on: bool = False,
+                 preassigned_attrs = {}):
 
-    height: None | int = None
-    width: None | int = None
+        self.height: None | int
+        self.width: None | int
 
-    image_type: ImageType = ImageType.NA
-    _image_type_prob: float = 0.
-    orientation: ImageOrientation = ImageOrientation.NA
+        self.image_type: ImageType
+        self._image_type_prob: float
+        self.orientation: ImageOrientation
 
-    def __post_init__(self):
-        super().__post_init__()
+        super().__init__(path, probe_on, preassigned_attrs)
+
+    def _setup_attr(self):
+        super()._setup_attr()
+
+        self.height =  None
+        self.width = None
+
+        self.image_type = ImageType.NA
+        self._image_type_prob = 0.
+        self.orientation = ImageOrientation.NA
 
         if self.probe_on:
             self._probe()
@@ -188,3 +242,18 @@ class ImageFile(File):
                 self.orientation = ImageOrientation.PORT
             else:
                 self.orientation = ImageOrientation.LAND
+
+
+class FileFactory:
+    _reg = {
+        Category.VIDEO: VideoFile,
+        Category.IMAGE: ImageFile,
+        Category.AUDIO: File,
+        Category.TXT: File,
+        Category.ZIP: File,
+        Category.NA: File,
+    }
+
+    @classmethod
+    def get(cls, cat: Category) -> File:
+        return cls._reg[cat]
