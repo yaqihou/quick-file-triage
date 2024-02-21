@@ -4,7 +4,7 @@ import ffmpeg
 import datetime as dt
 from termcolor import colored
 
-from .enums import Category, VideoLengthType, VideoOrientation, ImageOrientation, ImageType
+from .enums import Category, VideoLengthType, VideoOrientation, ImageOrientation, ImageType, Enum
 from .anime_or_not.anime_or_not import analysis_image
 
 # TODO - modify the anime_or_not to support 4-channel (alpha) PNG files
@@ -66,7 +66,7 @@ class File():
     def to_dict(self):
         """Store attribute in form of dictionary for pickling"""
         # return {attr: getattr(self, attr) for attr in self._attr_register}
-        return {**self.__dict__}
+        return {k: v.name if isinstance(v, Enum) else v for k, v in self.__dict__.items()}
 
     @classmethod
     def from_dict(cls, prop_dict):
