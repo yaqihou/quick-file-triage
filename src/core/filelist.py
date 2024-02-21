@@ -7,8 +7,8 @@ from termcolor import colored
 import subprocess as sp
 from tabulate import SEPARATING_LINE, tabulate
 
-from .enums import Category, ImageOrientation, ImageType, SortAttr, VideoOrientation, VideoLengthType
-from .files import File, ImageFile, VideoFile
+from .enums import Category, ImageType, SortAttr, Orientation, MediaLengthType
+from .files import AudioFile, File, ImageFile, VideoFile
 from .utils import MinType, get_readable_filesize, parse_sec_to_str
 
 # TODO - support general query search
@@ -16,9 +16,10 @@ from .utils import MinType, get_readable_filesize, parse_sec_to_str
 
 class FileList():
 
-    _category: Category | None = None
+    _category: Category = Category.NA
     _open_file_cmd_lst: list[str] = []
     _target_folder: str = "@uncatgorized"
+    _file_type: type = File
 
     process_list: list[sp.Popen] = []
     
@@ -61,7 +62,7 @@ class FileList():
 
         if isinstance(path_or_file, str):
             if os.path.isfile(path_or_file):
-                f = File(path_or_file, **kwargs)
+                f = self._file_type(path_or_file, **kwargs)
             else:
                 raise ValueError(f"Given path {path_or_file} doesn't exist")
 
@@ -72,6 +73,10 @@ class FileList():
             raise ValueError(f'Given input {path_or_file} should be a path str or File instance')
 
         self._add_file(f)
+
+
+    def add_file_from_cache(self, _dict):
+        self._add_file(self._file_type.from_dict(_dict))
 
     def _add_file(self, f: File):
         self.filelist.append(f)
@@ -201,15 +206,14 @@ class FileList():
             else:
                 to_move_list.append((f, dst))
             
+        # TODO - refactor the overwriting logic here
         if existed_file_list:
-            # TODO - Add md5sum check
             print("The following files already exists:")
             for f, dst in existed_file_list:
                 print(colored(f.name, 'yellow'))
                 print(f'   - [{get_readable_filesize(f.size)}] {f.path}')
                 print(f'   + [{get_readable_filesize(os.path.getsize(dst))}] {dst}')
 
-            # TODO - Add one-by-one selection and overwrite mode
             prompt = input('What action wolud you like? *[S]kip / [R]ename / [Q]uit').lower()
 
             if prompt in ['s', '']:
@@ -315,58 +319,141 @@ class FileList():
         return self
 
 
-class VideoFileList(FileList):
+class AudioFileList(FileList):
+
+    _category = Category.AUDIO
+    _target_folder = "@audio"
+    _open_file_cmd_lst = ['vlc', '--']
+    _file_type: type = AudioFile
+
+    def __init__(self, filelist: list[AudioFile] = []):
+        self.length_type_map: dict[MediaLengthType, list[AudioFile]] = {
+            lt: [] for lt in MediaLengthType
+        }
+        super().__init__(filelist)
+
+        self.filelist: list[AudioFile]
+
+    @property
+    def shorts(self):
+        return self.by_length_type(MediaLengthType.S)
+
+    @property
+    def mids(self):
+        return self.by_length_type(MediaLengthType.M)
+
+    @property
+    def longs(self):
+        return self.by_length_type(MediaLengthType.L)
+
+    @property
+    def exlongs(self):
+        return self.by_length_type(MediaLengthType.XL)
+
+    def open(self,
+             length_type: None | MediaLengthType = None,
+             top: None | int = None,
+             random: bool = False,
+             *,
+             path_lst: None | list[str] = None
+             ):
+        """Open first <top> / all files in default app"""
+
+        if length_type is None:
+            super().open(top=top, random=random, path_lst=path_lst)
+        elif length_type is not None:
+            self.by_length_type(length_type)\
+                .open(top=top, random=random, path_lst=path_lst)
+        else:
+            raise ValueError('Something wrong with the input')
+
+    def _add_file(self, f: AudioFile):
+
+        if f.probe_on and f.broken:
+            _folder = '@broken-audios'
+            self._prepare_dir(_folder)
+            dst = self.get_uniq_dst(os.path.join(_folder, f.name))
+            f.move(os.path.join(dst))
+
+        else:
+            super()._add_file(f)
+            self.length_type_map[f.length_type].append(f)
+
+    def by_length_type(self, length_type: MediaLengthType):
+        return self.__class__(self.length_type_map[length_type])
+
+    def summary(self):
+
+        print('Audio files summary:')
+        summary_table = [
+            ["", "Sum"],
+            ["Short", 0],
+            ["Medium", 0],
+            ["Long", 0],
+            ["Ex-Long", 0],
+            ["Unknown Length", 0],
+            ["Sum", 0]]
+
+        row_map = {
+            MediaLengthType.S: 1,
+            MediaLengthType.M: 2,
+            MediaLengthType.L: 3,
+            MediaLengthType.XL: 4,
+            MediaLengthType.NA: 5
+        }
+
+        for f in self.filelist:
+           row = row_map[f.length_type]
+
+           summary_table[row][1] += 1
+           summary_table[-1][1] += 1
+
+        print(tabulate(summary_table))
+
+    def _get_details_to_show(self, show_path, color):
+        data_dict, total_dict = super()._get_details_to_show(show_path, color)
+
+        data_dict['Duration'] = []
+        for f in self.filelist:
+            data_dict['Duration'].append(parse_sec_to_str(f.duration) if f.duration else "")
+
+        total_dict['Duration'] = parse_sec_to_str(sum(
+            f.duration if f.duration else 0
+            for f in self.filelist
+        ))
+
+        return data_dict, total_dict
+
+
+class VideoFileList(AudioFileList):
 
     _category = Category.VIDEO
     _target_folder = "@video"
-    _open_file_cmd_lst = ['vlc', '--']
+    _file_type = VideoFile
 
     def __init__(self, filelist: list[VideoFile] = []):
-        self.orientation_map: dict[VideoOrientation, list[VideoFile]] = {
-            ori: [] for ori in VideoOrientation
-        }
-        self.length_type_map: dict[VideoLengthType, list[VideoFile]] = {
-            lt: [] for lt in VideoLengthType
+        self.orientation_map: dict[Orientation, list[VideoFile]] = {
+            ori: [] for ori in Orientation
         }
         super().__init__(filelist)
 
         self.filelist: list[VideoFile]
 
     @property
-    def shorts(self):
-        return self.by_length_type(VideoLengthType.S)
-
-    @property
-    def mids(self):
-        return self.by_length_type(VideoLengthType.M)
-
-    @property
-    def longs(self):
-        return self.by_length_type(VideoLengthType.L)
-
-    @property
-    def exlongs(self):
-        return self.by_length_type(VideoLengthType.XL)
-
-    @property
-    def unknown_length(self):
-        return self.by_length_type(VideoLengthType.NA)
-
-    @property
     def portrait(self):
-        return self.by_orientation(VideoOrientation.PORT)
+        return self.by_orientation(Orientation.PORT)
 
     @property
     def landscape(self):
-        return self.by_orientation(VideoOrientation.LAND)
+        return self.by_orientation(Orientation.LAND)
 
     @property
     def unknown_ratio(self):
-        return self.by_orientation(VideoOrientation.NA)
+        return self.by_orientation(Orientation.NA)
 
     def open(self,
-             orientation: None | VideoOrientation = None,
-             length_type: None | VideoLengthType = None,
+             orientation: None | Orientation = None,
+             length_type: None | MediaLengthType = None,
              top: None | int = None,
              random: bool = False,
              *,
@@ -389,7 +476,6 @@ class VideoFileList(FileList):
         else:
             raise ValueError('Something wrong with the input')
 
-
     def _add_file(self, f: VideoFile):
 
         if f.probe_on and f.broken:
@@ -401,12 +487,8 @@ class VideoFileList(FileList):
         else:
             super()._add_file(f)
             self.orientation_map[f.orientation].append(f)
-            self.length_type_map[f.length_type].append(f)
 
-    def by_length_type(self, length_type: VideoLengthType):
-        return self.__class__(self.length_type_map[length_type])
-
-    def by_orientation(self, orientation: VideoOrientation):
+    def by_orientation(self, orientation: Orientation):
         return self.__class__(self.orientation_map[orientation])
 
     def _get_dst(self, f: VideoFile, dst_folder: str):
@@ -444,17 +526,17 @@ class VideoFileList(FileList):
             ["Sum", 0, 0, 0, 0]]
 
         row_map = {
-            VideoLengthType.S: 1,
-            VideoLengthType.M: 2,
-            VideoLengthType.L: 3,
-            VideoLengthType.XL: 4,
-            VideoLengthType.NA: 5
+            MediaLengthType.S: 1,
+            MediaLengthType.M: 2,
+            MediaLengthType.L: 3,
+            MediaLengthType.XL: 4,
+            MediaLengthType.NA: 5
         }
 
         col_map = {
-            VideoOrientation.PORT: 1,
-            VideoOrientation.LAND: 2,
-            VideoOrientation.NA: 3
+            Orientation.PORT: 1,
+            Orientation.LAND: 2,
+            Orientation.NA: 3
         }
 
         for f in self.filelist:
@@ -471,14 +553,12 @@ class VideoFileList(FileList):
     def _get_details_to_show(self, show_path, color):
         data_dict, total_dict = super()._get_details_to_show(show_path, color)
 
-        data_dict['Duration'] = []
         data_dict['Height'] = []
         data_dict['Width'] = []
         data_dict['Port/Land'] = []
         for f in self.filelist:
             data_dict['Height'].append(f.height if f.height else "")
             data_dict['Width'].append(f.width if f.width else "")
-            data_dict['Duration'].append(parse_sec_to_str(f.duration) if f.duration else "")
             data_dict['Port/Land'].append(f.orientation.value)
 
         total_dict['Duration'] = parse_sec_to_str(sum(
@@ -489,22 +569,16 @@ class VideoFileList(FileList):
         return data_dict, total_dict
 
 
-class AudioFileList(FileList):
-
-    _category = Category.AUDIO
-    _target_folder = "@audio"
-    _open_file_cmd_lst = ['vlc', '--']
-
-
 class ImageFileList(FileList):
 
     _category = Category.IMAGE
     _target_folder = '@image'
     _open_file_cmd_lst = ['feh', '-g', '1680x1050', '--scale-down', '--auto-zoom']
+    _file_type = ImageFile
 
     def __init__(self, filelist: list[ImageFile] = []):
-        self.orientation_map: dict[ImageOrientation, list[ImageFile]] = {
-            ori: [] for ori in ImageOrientation
+        self.orientation_map: dict[Orientation, list[ImageFile]] = {
+            ori: [] for ori in Orientation
         }
         self.image_type_map: dict[ImageType, list[ImageFile]] = {
             _type: [] for _type in ImageType
@@ -527,18 +601,18 @@ class ImageFileList(FileList):
 
     @property
     def portrait(self):
-        return self.by_orientation(ImageOrientation.PORT)
+        return self.by_orientation(Orientation.PORT)
 
     @property
     def landscape(self):
-        return self.by_orientation(ImageOrientation.LAND)
+        return self.by_orientation(Orientation.LAND)
 
     @property
     def unknown_ratio(self):
-        return self.by_orientation(ImageOrientation.NA)
+        return self.by_orientation(Orientation.NA)
 
     def open(self,
-             orientation: None | ImageOrientation = None,
+             orientation: None | Orientation = None,
              image_type: None | ImageType = None,
              top: None | int = None,
              random: bool = False,
@@ -580,7 +654,7 @@ class ImageFileList(FileList):
     def by_image_type(self, image_type: ImageType):
         return self.__class__(self.image_type_map[image_type])
 
-    def by_orientation(self, orientation: ImageOrientation):
+    def by_orientation(self, orientation: Orientation):
         return self.__class__(self.orientation_map[orientation])
 
     def summary(self):
@@ -602,9 +676,9 @@ class ImageFileList(FileList):
         }
 
         col_map = {
-            ImageOrientation.PORT: 1,
-            ImageOrientation.LAND: 2,
-            ImageOrientation.NA: 3
+            Orientation.PORT: 1,
+            Orientation.LAND: 2,
+            Orientation.NA: 3
         }
 
         for f in self.filelist:

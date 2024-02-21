@@ -17,9 +17,8 @@ from .filelist import VideoFileList, ImageFileList, AudioFileList, TXTFileList, 
 CACHE_PKL = os.path.join(os.environ['HOME'], '.cache', 'my-file-organizer', 'cache.pkl')
 
 # TODO - the probe could be put into a later stage (after creating the file list)
-# TODO - allow using cache by basename
 # TODO - refactor the cache: save all data in native data structure
-# TODO - add fast mode, i.e. don't walk through the real filelist but using the cached dict
+# TODO - add fast mode, i.e. don't walk through the real filelist but using the cached dict, and could check if existed in lazily
 
 class Manager():
 
@@ -32,9 +31,8 @@ class Manager():
     def __init__(self, *,
                  folder: str | None = None,
                  recursive: bool = False,
-                 video_probe_on: bool = True,
-                 image_probe_on: bool = True,
-                 use_cache: bool = True,
+                 probe_on: bool | dict[Category, bool] = True,
+                 use_cache: bool | dict[Category, bool] = True,
                  managed_data: dict[Category, FileList] | None = None):
 
         if folder is not None and managed_data is not None:
@@ -49,15 +47,9 @@ class Manager():
         os.chdir(folder)
         print('Chaning current working directory to', colored(folder, 'green'))
 
-        self.cat_options = {
-                Category.VIDEO: {'probe_on': video_probe_on},
-                Category.IMAGE: {'probe_on': image_probe_on},
-                Category.AUDIO: {},  # TODO add support to audio, should be parent class to Video
-                Category.TXT: {},
-                Category.ZIP: {},
-                Category.NA: {}
-        }
-        
+        self.use_cache = use_cache
+        self.probe_on = probe_on
+
         if managed_data is None:
             self.data = {
                 Category.VIDEO: VideoFileList(),
@@ -67,11 +59,7 @@ class Manager():
                 Category.ZIP: ZIPFileList(),
                 Category.NA: FileList()
             }
-            self.load(
-                video_probe_on=video_probe_on,
-                image_probe_on=image_probe_on,
-                recursive=recursive,
-                use_cache=use_cache)
+            self.load(recursive=recursive)
         else:
             self.data = managed_data
 
@@ -164,7 +152,7 @@ class Manager():
     def play_all_image(self, random=False):
         self.data[Category.IMAGE].open(random=random)
             
-    def load(self, video_probe_on=True, image_probe_on=True, recursive=False, use_cache=True):
+    def load(self, recursive=False):
 
         # Note that we assume the working directory has been changed already
         if not recursive:
@@ -186,18 +174,23 @@ class Manager():
         for path in tqdm(pathlist, desc="Loading files"):
             cat = Category.infer(os.path.basename(path))
 
+            use_cache = (self.use_cache if isinstance(self.use_cache, bool)
+                          else self.use_cache.get(cat, True))
+
             if not use_cache or path not in self.cache:
+                print('Loading from path now', path)
                 self.add_file(path, cat)
             else:
-                f = FileFactory.get(cat).from_dict(self.cache[path])
-                self.add_file(f, cat)
+                self.add_file_from_cache(self.cache[path], cat)
         return 
 
-    def add_file(self, path_or_file, cat, **kwargs):
-        if not kwargs:
-            kwargs = self.cat_options[cat]
+    def add_file(self, path_or_file, cat):
+        probe_on = (self.probe_on if isinstance(self.probe_on, bool)
+                    else self.probe_on.get(cat, True))
+        self.data[cat].add_file(path_or_file, probe_on=probe_on)
 
-        self.data[cat].add_file(path_or_file, **kwargs)
+    def add_file_from_cache(self, cache_dict, cat):
+        self.data[cat].add_file_from_cache(cache_dict)
 
     def save_cache(self):
         """Save file list, the path is used as key"""
@@ -205,10 +198,19 @@ class Manager():
         for fl in self.data.values():
             _dict.update(fl.to_dict())
 
-        _dup_keys = _dict.keys() & self.cache.keys()
-        for _key in _dup_keys:
-            if _dict[_key] != self.cache[_key]:
-                print(f"Found conflicting cache key: {_key}")
+        dup_confirm = False
+        conflict_keys = []
+        dup_keys = _dict.keys() & self.cache.keys()
+        for key in dup_keys:
+            if _dict[key] != self.cache[key]:
+                dup_confirm = True
+                conflict_keys.append(key)
+
+        if dup_confirm:
+            print(f"Found conflicting cache keys:")
+            for key in conflict_keys:
+                print(f'    - {key}')
+             
         self.cache.update(_dict)
 
         folder = os.path.dirname(CACHE_PKL)

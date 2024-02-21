@@ -28,14 +28,8 @@ class OrderedEnum(Enum):
             return self.value < other.value
         raise NotImplementedError(f"Cannot compare class {self.__class__} and {other.__class__}")
 
-class VideoOrientation(OrderedEnum):
 
-    PORT = 'Po'
-    LAND = 'La'
-    NA = ''
-
-
-class VideoLengthType(OrderedEnum):
+class MediaLengthType(OrderedEnum):
 
     S = 'S'
     M = 'M'
@@ -44,7 +38,7 @@ class VideoLengthType(OrderedEnum):
     NA = ''
 
 
-class ImageOrientation(OrderedEnum):
+class Orientation(OrderedEnum):
 
     PORT = 'Po'
     LAND = 'La'
