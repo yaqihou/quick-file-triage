@@ -38,7 +38,7 @@ def parse_sec_to_str(s):
 
 
 @total_ordering
-class MinType(object):
+class MinType():
     """Used to compare when attribute is missing during sort"""
     def __le__(self, other):
         return True

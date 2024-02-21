@@ -127,7 +127,6 @@ class AudioFile(File):
             self.broken = True
             return
 
-        print('probing audio file', colored(self.path, "yellow"))
         stream = audio_streams[0]
         duration = stream.get('duration', None)
         if duration is None:
