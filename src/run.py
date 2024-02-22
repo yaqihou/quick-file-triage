@@ -2,7 +2,7 @@
 from core.manager import Manager
 from core.enums import SortAttr, Category
 
-manager = Manager(
+m= Manager(
     folder='/media/yaqi/red2/',  # '/mnt/tmp2/',
     recursive=True,
     probe_on = True,

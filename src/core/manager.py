@@ -107,6 +107,12 @@ class Manager():
                 key: val.by_mdate(date) for key, val in self.data.items()
             })
 
+    def by_folder(self, folder_prefix):
+        return Manager(
+            managed_data={
+                key: val.by_folder(folder_prefix) for key, val in self.data.items()
+            })
+
     @need_confirm('Are you sure to organize all files automatically?')
     def organize(self, verbose=True, dry_run=False):
         for fl in self.data.values():
@@ -118,7 +124,7 @@ class Manager():
     @need_confirm('Are you sure to move all files to a single folder?')
     def move_all_to(self, dst_folder, verbose=True, dry_run=False):
         for fl in self.data.values():
-            fl.move_to(dst_folder, verbose=True, dry_run=False)
+            fl.move_to(dst_folder, verbose=verbose, dry_run=dry_run)
 
         if not dry_run:
             self.save_cache()
@@ -174,7 +180,7 @@ class Manager():
 
                 # Prune the dirs
                 dirs[:] = [d for d in dirs if not (d.startswith('#') or d.startswith('.'))]
-                if root == '.':  # root is current
+                if root == '.':  # if root is current
                     pathlist += files
                 else:
                     assert not (root.startswith('#') and root.startswith('.'))
