@@ -11,7 +11,7 @@ from termcolor import colored
 
 from .utils import need_confirm
 from .enums import Category
-from .files import File, FileFactory, VideoFile, ImageFile
+from .files import File
 from .filelist import VideoFileList, ImageFileList, AudioFileList, TXTFileList, ZIPFileList, FileList
 
 CACHE_PKL = os.path.join(os.environ['HOME'], '.cache', 'my-file-organizer', 'cache.pkl')
@@ -178,19 +178,25 @@ class Manager():
                           else self.use_cache.get(cat, True))
 
             if not use_cache or path not in self.cache:
-                print('Loading from path now', path)
-                self.add_file(path, cat)
+                self._add_file(path, cat)
             else:
-                self.add_file_from_cache(self.cache[path], cat)
+                self._add_file_from_cache(self.cache[path], cat)
         return 
 
-    def add_file(self, path_or_file, cat):
+    def _add_file(self, path_or_file, cat):
         probe_on = (self.probe_on if isinstance(self.probe_on, bool)
                     else self.probe_on.get(cat, True))
         self.data[cat].add_file(path_or_file, probe_on=probe_on)
 
-    def add_file_from_cache(self, cache_dict, cat):
+    def _add_file_from_cache(self, cache_dict, cat):
         self.data[cat].add_file_from_cache(cache_dict)
+
+    # TODO - user interface to add file interactively
+    def add_file(self, path: str):
+        raise NotImplementedError
+
+    def add_folder(self, path: str):
+        raise NotImplementedError
 
     def save_cache(self):
         """Save file list, the path is used as key"""
