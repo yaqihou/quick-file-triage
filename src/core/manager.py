@@ -130,6 +130,15 @@ class Manager():
             ret += fl.mdates
         return list(sorted(ret))
 
+    @property
+    def folders(self):
+        _dict = {}
+        for fl in self.data.values():
+            _dict.update(fl.folders)
+
+        return _dict
+        
+
     def summary(self, cat: Category | None = None, compact=True):
         if cat is None:
             _tot_len = 0

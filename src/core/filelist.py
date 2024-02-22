@@ -26,6 +26,7 @@ class FileList():
     def __init__(self, filelist: list[File] = []):
 
         self.filelist: list[File] = []
+        self._folder_keys = {}  # use a dictionary for easier autocomplete
         self.mdate_map: dict[dt.date, list[File]] = {}
 
         for f in filelist:
@@ -81,8 +82,26 @@ class FileList():
     def _add_file(self, f: File):
         self.filelist.append(f)
 
+        # add the folder path to be used in 
+        _folder = os.path.dirname(f.path).split(os.sep)
+        
+        for idx in range(1, len(_folder)+1):
+            k = os.sep.join(_folder[:idx])
+            self._folder_keys[k] = k
+
         self.mdate_map.setdefault(f.mdate, [])
         self.mdate_map[f.mdate].append(f)
+
+    @property
+    def folders(self):
+        return self._folder_keys
+
+    def _get_filelist_by_folder(self, folder_prefix):
+        # NOTE Could be optimized if organize it as a tree, but we may want to keep the order as used in .sort()
+        return [f for f in self.filelist if f.path.startswith(folder_prefix)]
+    
+    def by_folder(self, folder_prefix):
+        return self.__class__(self._get_filelist_by_folder(folder_prefix))
 
     # Date time related methods
     def by_mdate(self, date: dt.date):
