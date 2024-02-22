@@ -290,6 +290,8 @@ class FileList():
 
         print(tabulate(data, headers=header))
 
+        return self
+
     def _get_details_to_show(self, show_path, color):
         data_dict = {
             'Filename': [],
@@ -428,6 +430,8 @@ class AudioFileList(FileList):
            summary_table[-1][1] += 1
 
         print(tabulate(summary_table))
+
+        return self
 
     def _get_details_to_show(self, show_path, color):
         data_dict, total_dict = super()._get_details_to_show(show_path, color)
