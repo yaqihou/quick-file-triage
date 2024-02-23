@@ -1,5 +1,6 @@
 
 import os
+import shutil
 import ffmpeg
 import datetime as dt
 from termcolor import colored
@@ -90,7 +91,7 @@ class File():
         if not dry_run:
             if verbose:
                 print(f'Moving {self.path} -> {dst}')
-            os.rename(self.path, dst)
+            shutil.move(self.path, dst)
             self.update_path(dst)
 
     def __eq__(self, other):

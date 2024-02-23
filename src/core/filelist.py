@@ -210,13 +210,13 @@ class FileList():
     def _get_dst(self, f: File, dst_folder: str):
         return os.path.join(dst_folder, f.name)
 
-    def organize(self, verbose=True, dry_run=False):
+    def organize(self, verbose: bool = False, dry_run: bool = False):
         if self._target_folder is None:
             print("No target folder defined to organize the file into")
         else:
             self._organize(verbose, dry_run)
 
-    def _organize(self, verbose, dry_run):
+    def _organize(self, verbose: bool = False, dry_run: bool = False):
         """Default organize behaviour"""
 
         dst_folder = self._target_folder
@@ -228,7 +228,7 @@ class FileList():
             print(f'Destination folder {colored(folder, "green")} does not exist, creating it now...')
             os.makedirs(folder)
 
-    def move_to(self, dst_folder, verbose=True, dry_run=False):
+    def move_to(self, dst_folder: str, verbose: bool = True, dry_run: bool = False):
         existed_file_list = []
         to_move_list = []
         for f in self.filelist:
@@ -305,8 +305,6 @@ class FileList():
 
 
         print(tabulate(data, headers=header))
-
-        return self
 
     def _get_details_to_show(self, show_path, color):
         data_dict = {
@@ -446,7 +444,6 @@ class AudioFileList(FileList):
 
         print(tabulate(summary_table))
 
-        return self
 
     def _get_details_to_show(self, show_path, color):
         data_dict, total_dict = super()._get_details_to_show(show_path, color)

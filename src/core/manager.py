@@ -57,7 +57,7 @@ class Manager():
                 Category.ZIP: ZIPFileList(),
                 Category.NA: FileList()
             }
-            self.load(recursive=recursive)
+            self._load(recursive=recursive)
         else:
             self.data = managed_data
 
@@ -118,12 +118,12 @@ class Manager():
             })
 
     @need_confirm('Are you sure to organize all files automatically?')
-    def organize(self, verbose=True, dry_run=False):
+    def organize(self, verbose=False, dry_run=False):
         for fl in self.data.values():
             fl.organize(verbose=verbose, dry_run=dry_run)
 
         if not dry_run:
-            self.save_cache()
+            self.save_cache_with_confirm()
 
     @need_confirm('Are you sure to move all files to a single folder?')
     def move_all_to(self, dst_folder, verbose=True, dry_run=False):
@@ -131,7 +131,7 @@ class Manager():
             fl.move_to(dst_folder, verbose=verbose, dry_run=dry_run)
 
         if not dry_run:
-            self.save_cache()
+            self.save_cache_with_confirm()
 
     @property
     def mdates(self):
@@ -148,13 +148,11 @@ class Manager():
 
         return _dict
 
-    def summary(self, cat: Category | None = None, compact=True):
+    def summary(self, cat: Category | None = None):
         if cat is None:
             _tot_len = 0
             for fl in self.data.values():
                 fl.summary()
-                if not compact:
-                    fl.details()
                 _tot_len += len(fl)
             print('---------------')
             print(f"Total file counts: {_tot_len}")
@@ -170,24 +168,11 @@ class Manager():
     def play_all_image(self, random=False):
         self.data[Category.IMAGE].open(random=random)
             
-    def load(self, recursive=False):
+    def _load(self, recursive: bool = False):
+        """Load the initial folder content"""
 
-        # Note that we assume the working directory has been changed already
-        if not recursive:
-            pathlist = [f for f in os.listdir('.')]
-            pathlist = list(filter(os.path.isfile, pathlist))
-        else:
-            pathlist = []
-            for (root, dirs, files) in os.walk('.', topdown=True):
-                root = os.path.relpath(root, '.')
-
-                # Prune the dirs
-                dirs[:] = [d for d in dirs if not (d.startswith('#') or d.startswith('.'))]
-                if root == '.':  # if root is current
-                    pathlist += files
-                else:
-                    assert not (root.startswith('#') and root.startswith('.'))
-                    pathlist += [os.path.join(root, f) for f in files]
+        # We only use this function internally so that the cwd is already set
+        pathlist = self._prepare_pathlist('.', recursive=recursive)
         
         for path in tqdm(pathlist, desc="Loading files"):
             cat = Category.infer(os.path.basename(path))
@@ -200,6 +185,38 @@ class Manager():
             else:
                 self._add_file_from_cache(self.cache[path], cat)
         return 
+ 
+    def _prepare_pathlist(self, base_folder: str, recursive: bool = False):
+        """Return a list of file paths (relative) under the given base_folder path"""
+     
+        base_folder = os.path.relpath(base_folder, '.')
+
+        # Note that we assume the working directory has been changed already
+        if not recursive:
+            pathlist = list(filter(
+                os.path.isfile,
+                (os.path.join(base_folder, f) for f in os.listdir(base_folder))
+            ))
+        else:
+            pathlist = []
+            for (root, dirs, files) in os.walk(base_folder, topdown=True):
+                root = os.path.relpath(root, base_folder)
+
+                # Prune the dirs
+                dirs[:] = [d for d in dirs if not self._exclude_folder(d)]
+                if root == '.':  # if root is current
+                    pathlist += files
+                else:
+                    assert not (root.startswith('#') and root.startswith('.'))
+                    pathlist += [os.path.join(root, f) for f in files]
+
+        return pathlist
+
+    def _exclude_folder(self, d: str):
+        if d[0] == '#':  return True
+        elif len(d) > 1 and d[0] == '.':  return True
+
+        return False
 
     def _add_file(self, path_or_file, cat):
         auto_probe = (
@@ -213,10 +230,17 @@ class Manager():
 
     # TODO - user interface to add file interactively
     def add_file(self, path: str):
-        raise NotImplementedError
+        cat = Category.infer(os.path.basename(path))
+        return self._add_file(path, cat)
 
-    def add_folder(self, path: str):
-        raise NotImplementedError
+    def add_folder(self, path: str, recursive: bool = False):
+        if not os.path.isdir(path):
+            print(f'Given path {path} is not a folder')
+            return
+
+        pathlist = self._prepare_pathlist(path, recursive=recursive)
+        for path in tqdm(pathlist, desc=f"Adding folder"):
+            self.add_file(path)
 
     def probe(self, force: bool = False, verbose: bool = False):
         for fl in self.data.values():
@@ -246,6 +270,23 @@ class Manager():
         for fl in self.data.values():
             _dict.update(fl.to_dict())
 
+        self._check_conflicting_cache(_dict)
+        self.cache.update(_dict)
+        self.cache_all[self.cwd] = self.cache
+
+        folder = os.path.dirname(CACHE_PKL)
+        os.makedirs(folder, exist_ok=True)
+        with open(CACHE_PKL, 'wb') as f:
+            pickle.dump(self.cache_all, f)
+
+        print(f'File cache saved successfully!')
+
+    @need_confirm('Do you want to save cache?')
+    def save_cache_with_confirm(self):
+        return self.save_cache()
+
+    def _check_conflicting_cache(self, _dict):
+
         dup_confirm = False
         conflict_keys = []
         dup_keys = _dict.keys() & self.cache.keys()
@@ -265,13 +306,5 @@ class Manager():
                     print(' ' * 8 + f'{kk}: {oldv} -> {newv}')
                     
              
-        self.cache.update(_dict)
-        self.cache_all[self.cwd] = self.cache
 
-        folder = os.path.dirname(CACHE_PKL)
-        os.makedirs(folder, exist_ok=True)
-        with open(CACHE_PKL, 'wb') as f:
-            pickle.dump(self.cache_all, f)
-
-        print(f'File cache saved successfully!')
 
