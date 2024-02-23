@@ -257,7 +257,13 @@ class Manager():
         if dup_confirm:
             print(f"Found conflicting cache keys:")
             for key in conflict_keys:
-                print(f'    - {key}')
+                print(' ' * 4 + f'+ {key}')
+
+                for kk in _dict[key].keys() | self.cache[key].keys():
+                    oldv = self.cache[key].get(kk, "")
+                    newv = _dict[key].get(kk, "")
+                    print(' ' * 8 + f'{kk}: {oldv} -> {newv}')
+                    
              
         self.cache.update(_dict)
         self.cache_all[self.cwd] = self.cache
