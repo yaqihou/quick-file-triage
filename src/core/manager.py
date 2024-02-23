@@ -1,7 +1,5 @@
 #!/usr/bin/python3
 
-# TODO - Add GUI / interface
-
 import abc
 import os
 import pickle
@@ -12,8 +10,9 @@ from termcolor import colored
 
 from .utils import need_confirm
 from .enums import Category
-from .files import File
-from .filelist import VideoFileList, ImageFileList, AudioFileList, TXTFileList, ZIPFileList, FileList
+from .filelists import AudioFileList, VideoFileList, DocFileList, CompressedFileList
+from .filelists import ImageFileList, FileList
+
 
 CACHE_PKL = os.path.join(os.environ['HOME'], '.cache', 'my-file-organizer', 'cache.pkl')
 
@@ -36,6 +35,52 @@ class ManagerBase(abc.ABC):
             for k, v in cache_all.items():
                 print(f'    - {k} ({len(v)} entries)')
 
+    @property
+    def cache(self) -> dict[str, dict]:
+        return self.cache_all.get(self.cwd, {})
+
+    def save_cache(self):
+        """Save file list, the path is used as key"""
+        _dict = {}
+        for fl in self.data.values():
+            _dict.update(fl.to_dict())
+
+        self._check_conflicting_cache(_dict)
+        self.cache.update(_dict)
+        self.cache_all[self.cwd] = self.cache
+
+        folder = os.path.dirname(CACHE_PKL)
+        os.makedirs(folder, exist_ok=True)
+        with open(CACHE_PKL, 'wb') as f:
+            pickle.dump(self.cache_all, f)
+
+        print(f'File cache saved successfully!')
+
+    @need_confirm('Do you want to save cache?')
+    def save_cache_with_confirm(self):
+        return self.save_cache()
+
+    def _check_conflicting_cache(self, _dict):
+
+        dup_confirm = False
+        conflict_keys = []
+        dup_keys = _dict.keys() & self.cache.keys()
+        for key in dup_keys:
+            if _dict[key] != self.cache[key]:
+                dup_confirm = True
+                conflict_keys.append(key)
+
+        if dup_confirm:
+            print(f"Found conflicting cache keys:")
+            for key in conflict_keys:
+                print(' ' * 4 + f'+ {key}')
+
+                for kk in _dict[key].keys() | self.cache[key].keys():
+                    oldv = self.cache[key].get(kk, "")
+                    newv = _dict[key].get(kk, "")
+                    print(' ' * 8 + f'{kk}: {oldv} -> {newv}')
+                    
+    # ----------------------------------
     def __init__(self, folder: str,
                  *,
                  recursive: bool = False,
@@ -56,9 +101,16 @@ class ManagerBase(abc.ABC):
         else:
             self.data = managed_data
 
+    def __getitem__(self, cat: Category):
+        """Aliast to by_cat"""
+        return self.by_cat(cat)
+
+    def __len__(self):
+        return sum(len(val) for val in self.data.values())
+
     @property
-    def cache(self) -> dict[str, dict]:
-        return self.cache_all.get(self.cwd, {})
+    def len(self):
+        return self.__len__()
 
     @abc.abstractmethod
     def _init_data(self) -> dict:
@@ -138,48 +190,6 @@ class ManagerBase(abc.ABC):
             self.add_file(path)
 
     # ----------------------------------
-    def save_cache(self):
-        """Save file list, the path is used as key"""
-        _dict = {}
-        for fl in self.data.values():
-            _dict.update(fl.to_dict())
-
-        self._check_conflicting_cache(_dict)
-        self.cache.update(_dict)
-        self.cache_all[self.cwd] = self.cache
-
-        folder = os.path.dirname(CACHE_PKL)
-        os.makedirs(folder, exist_ok=True)
-        with open(CACHE_PKL, 'wb') as f:
-            pickle.dump(self.cache_all, f)
-
-        print(f'File cache saved successfully!')
-
-    @need_confirm('Do you want to save cache?')
-    def save_cache_with_confirm(self):
-        return self.save_cache()
-
-    def _check_conflicting_cache(self, _dict):
-
-        dup_confirm = False
-        conflict_keys = []
-        dup_keys = _dict.keys() & self.cache.keys()
-        for key in dup_keys:
-            if _dict[key] != self.cache[key]:
-                dup_confirm = True
-                conflict_keys.append(key)
-
-        if dup_confirm:
-            print(f"Found conflicting cache keys:")
-            for key in conflict_keys:
-                print(' ' * 4 + f'+ {key}')
-
-                for kk in _dict[key].keys() | self.cache[key].keys():
-                    oldv = self.cache[key].get(kk, "")
-                    newv = _dict[key].get(kk, "")
-                    print(' ' * 8 + f'{kk}: {oldv} -> {newv}')
-                    
-    # ----------------------------------
     def _by(self, key:  Category | dt.date, target: dict):
         if key in target:
             return FileList(filelist=target[key])
@@ -221,6 +231,13 @@ class ManagerBase(abc.ABC):
     # ----------------------------------
     # Dates related alias
     
+    # ----------------------------------
+    # Filesize related alias
+    def large_files(self):
+        pass
+
+    def small_files(self):
+        pass
 
     # ----------------------------------
     def probe(self, force: bool = False, verbose: bool = False):
@@ -289,17 +306,10 @@ class Manager(ManagerBase):
             Category.VIDEO: VideoFileList(),
             Category.IMAGE: ImageFileList(),
             Category.AUDIO: AudioFileList(),
-            Category.TXT: TXTFileList(),
-            Category.ZIP: ZIPFileList(),
+            Category.TXT: DocFileList(),
+            Category.ZIP: CompressedFileList(),
             Category.NA: FileList()
         }
-
-    def __getitem__(self, cat: Category):
-        """Aliast to by_cat"""
-        return self.by_cat(cat)
-
-    def __len__(self):
-        return sum(len(val) for val in self.data.values())
 
     # Category alias
     @property
