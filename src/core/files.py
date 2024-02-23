@@ -4,6 +4,8 @@ import ffmpeg
 import datetime as dt
 from termcolor import colored
 
+from .utils import get_readable_filesize
+
 from .enums import Category, MediaLengthType, Orientation, ImageType, Enum
 from .anime_or_not.anime_or_not import analysis_image
 
@@ -14,42 +16,70 @@ class File():
     def __init__(
             self,
             path: str,
-            probe_on: bool = False,
+            *,
+            auto_probe: bool = False,
             preassigned_attrs = {}
     ):
 
         self.path: str = path
-        self.probe_on: bool = probe_on
+        self.probed: bool = False
 
         self.name: str = ""
         self.cat: Category = Category.NA
 
-        self.mtime: dt.datetime = dt.datetime(1899, 12, 31, 23, 59, 59)
-        self.mdate: dt.date = self.mtime.date()
-        self.size: float  = 0
+        self.fstat: dict = {}
 
         if not preassigned_attrs:
             self._probe_base_info()
-            if self.probe_on:  self._probe()
+            if auto_probe:  self._probe()
         else:
             for attr, val in preassigned_attrs.items():
-                # Let it crash if the attr not defined
+                # NOTE - Let it crash if the attr not defined
                 default_attr = getattr(self, attr)
                 setattr(self, attr,
                         type(default_attr)[val] if isinstance(default_attr, Enum) else val)
 
+
+    @property
+    def mtime(self):
+        return self.fstat['st_mtime']
+
+    @property
+    def mdate(self):
+        return self.mtime.date()
+
+    @property
+    def size(self):
+        return self.fstat['st_size']
+
+    @property
+    def size_human(self):
+        return get_readable_filesize(self.fstat['st_size'])
+    
     def _probe_base_info(self):
 
         self.name: str = os.path.basename(self.path)
         self.cat: Category = Category.infer(self.name)
 
-        _fstat = os.stat(self.path) 
-        self.mtime: dt.datetime = dt.datetime.fromtimestamp(_fstat.st_mtime)
-        self.mdate: dt.date = self.mtime.date()
-        self.size: float = _fstat.st_size 
+        # save as dict to allow parsing
+        _fstat = os.stat(self.path)
+        self.fstat = {attr: getattr(_fstat, attr) for attr in dir(_fstat) if attr.startswith('st_')}
+
+        for k, v in self.fstat.items():
+            if k.endswith('time'):
+                self.fstat[k] = dt.datetime.fromtimestamp(v)
+            elif k.endswith('time_ns'):
+                self.fstat[k] = dt.datetime.fromtimestamp(v // 1_000_000_000)
 
     def _probe(self):
+        """Populate other meta info fields"""
         return
+
+    def probe(self, force: bool = False):
+        if force or not self.probed:
+            self._probe()
+        else:
+            print(f'File {self.path} has already been probed, please pass force=True to fore a refresh')
     
     def update_path(self, new_path):
         self.path = new_path
@@ -78,10 +108,9 @@ class File():
     @classmethod
     def from_dict(cls, prop_dict):
         path = prop_dict['path']
-        probe_on = prop_dict['probe_on']
         other_fields = {k: v for k, v in prop_dict.items()
-                        if k not in ['path', 'probe_on']}
-        return cls(path, probe_on, other_fields)
+                        if k not in ['path']}
+        return cls(path, preassigned_attrs=other_fields)
 
 
 class AudioFile(File):
@@ -93,14 +122,19 @@ class AudioFile(File):
         ((1800, 3600000), MediaLengthType.XL),  # 30m <= 
     ]
 
-    def __init__(self, path: str, probe_on: bool = True,
-                 preassigned_attrs = {}
-                 ):
+    def __init__(
+            self,
+            path: str,
+            *,
+            auto_probe: bool = False,
+            preassigned_attrs = {}
+    ):
+
         self.duration: None | float = None
         self.length_type: MediaLengthType = MediaLengthType.NA
         self.broken: bool = False
 
-        super().__init__(path, probe_on, preassigned_attrs=preassigned_attrs)
+        super().__init__(path, auto_probe=auto_probe, preassigned_attrs=preassigned_attrs)
 
     def _probe(self):
         """Populate the media metadata fields"""
@@ -112,6 +146,8 @@ class AudioFile(File):
             self.broken = True
         else:
             self._parse_probe_info(probe)
+
+        self.probed = True
 
     def _parse_probe_info(self, probe):
         """Parse the probe info and populate fields"""
@@ -155,14 +191,18 @@ class VideoFile(AudioFile):
         ((3600, 3600000), MediaLengthType.XL),  # 60m <= 
     ]
 
-    def __init__(self, path: str, probe_on: bool = False,
-                 preassigned_attrs = {}
-                 ):
+    def __init__(
+            self,
+            path: str,
+            *,
+            auto_probe: bool = False,
+            preassigned_attrs = {}
+    ):
         self.height: None | int = None
         self.width: None | int = None
         self.orientation: Orientation = Orientation.NA
 
-        super().__init__(path, probe_on, preassigned_attrs=preassigned_attrs)
+        super().__init__(path, auto_probe=auto_probe, preassigned_attrs=preassigned_attrs)
 
 
     def _parse_probe_info(self, probe):
@@ -225,8 +265,13 @@ class VideoFile(AudioFile):
 
 class ImageFile(File):
 
-    def __init__(self, path: str, probe_on: bool = False,
-                 preassigned_attrs = {}):
+    def __init__(
+            self,
+            path: str,
+            *,
+            auto_probe: bool = False,
+            preassigned_attrs = {}
+    ):
 
         self.height: None | int = None
         self.width: None | int = None
@@ -235,7 +280,7 @@ class ImageFile(File):
         self._image_type_prob: float = 0.
         self.orientation: Orientation = Orientation.NA
 
-        super().__init__(path, probe_on, preassigned_attrs)
+        super().__init__(path, auto_probe=auto_probe, preassigned_attrs=preassigned_attrs)
         
     def _probe(self):
         """Populate the video metadata fields"""
@@ -257,6 +302,7 @@ class ImageFile(File):
             self.width, self.height = width, height
 
         self._set_orientation()
+        self.probed = True
 
     def _set_orientation(self):
 
@@ -267,18 +313,3 @@ class ImageFile(File):
                 self.orientation = Orientation.PORT
             else:
                 self.orientation = Orientation.LAND
-
-
-class FileFactory:
-    _reg = {
-        Category.VIDEO: VideoFile,
-        Category.IMAGE: ImageFile,
-        Category.AUDIO: AudioFile,
-        Category.TXT: File,
-        Category.ZIP: File,
-        Category.NA: File,
-    }
-
-    @classmethod
-    def get(cls, cat: Category) -> File:
-        return cls._reg[cat]

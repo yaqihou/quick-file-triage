@@ -59,11 +59,14 @@ class FileList():
     def len(self):
         return self.__len__()
 
-    def add_file(self, path_or_file: str | File, **kwargs):
+    def add_file(self,
+                 path_or_file: str | File,
+                 auto_probe: bool = False,
+                 **kwargs):
 
         if isinstance(path_or_file, str):
             if os.path.isfile(path_or_file):
-                f = self._file_type(path_or_file, **kwargs)
+                f = self._file_type(path_or_file, auto_probe=auto_probe)
             else:
                 raise ValueError(f"Given path {path_or_file} doesn't exist")
 
@@ -75,6 +78,11 @@ class FileList():
 
         self._add_file(f)
 
+    def probe(self, verbose: bool = False):
+        _iter = tqdm(self.filelist, desc='Probing metadata') if verbose else self.filelist
+
+        for f in _iter:
+            f.probe()
 
     def add_file_from_cache(self, _dict):
         self._add_file(self._file_type.from_dict(_dict))
@@ -230,8 +238,8 @@ class FileList():
             print("The following files already exists:")
             for f, dst in existed_file_list:
                 print(colored(f.name, 'yellow'))
-                print(f'   - [{get_readable_filesize(f.size)}] {f.path}')
-                print(f'   + [{get_readable_filesize(os.path.getsize(dst))}] {dst}')
+                print(f'   - [{f.size_human}] {f.path}')
+                print(f'   + [{f.size_human}] {dst}')
 
             prompt = input('What action wolud you like? *[S]kip / [R]ename / [Q]uit').lower()
 
@@ -311,9 +319,8 @@ class FileList():
                 f.name if not color else colored(f.name, 'green')
             )
 
-            _fsize = get_readable_filesize(f.size)
             data_dict['Size'].append(
-                _fsize if not color else colored(_fsize, 'yellow')
+                f.size_human if not color else colored(f.size_human, 'yellow')
             )
 
             data_dict['Date'].append(
@@ -390,7 +397,7 @@ class AudioFileList(FileList):
 
     def _add_file(self, f: AudioFile):
 
-        if f.probe_on and f.broken:
+        if f.probed and f.broken:
             _folder = '@broken-audios'
             self._prepare_dir(_folder)
             dst = self.get_uniq_dst(os.path.join(_folder, f.name))
@@ -501,7 +508,7 @@ class VideoFileList(AudioFileList):
 
     def _add_file(self, f: VideoFile):
 
-        if f.probe_on and f.broken:
+        if f.probed and f.broken:
             _folder = '@broken-videos'
             self._prepare_dir(_folder)
             dst = self.get_uniq_dst(os.path.join(_folder, f.name))
@@ -525,7 +532,7 @@ class VideoFileList(AudioFileList):
             prefix = f'[{_a}-{_b}]'
 
         # Avoid duplicate prefix or when probe is turned off
-        if f.name.startswith(prefix) or not f.probe_on:
+        if f.name.startswith(prefix) or not f.probed:
             prefix = ""
 
         return os.path.join(dst_folder, prefix + f.name)

@@ -19,19 +19,25 @@ CACHE_PKL = os.path.join(os.environ['HOME'], '.cache', 'my-file-organizer', 'cac
 # TODO - the probe could be put into a later stage (after creating the file list)
 # TODO - refactor the cache: save all data in native data structure
 # TODO - add fast mode, i.e. don't walk through the real filelist but using the cached dict, and could check if existed in lazily
+# TODO - the chdir thing limit one feature: for example, we may want to add files interactively from a different directory, need to comb through the logic here
+# TODO - move cache to be "base-folder" based so that it could work for multiple projects
+
+# TODO - create a base Manager to support multiple-purpose reuse
 
 class Manager():
 
-    cache: dict[str, File] = {}
+    cache_all: dict[str, dict[str, File]] = {}
     if os.path.isfile(CACHE_PKL):
         with open(CACHE_PKL, 'rb') as f:
-            cache = pickle.load(f)
-            print(f'Loaded {len(cache)} cached entries')
+            cache_all = pickle.load(f)
+            print(f'Found cache for {len(cache_all)} locations')
+            for folder in cache_all:
+                print(f'    - {folder}')
 
     def __init__(self, *,
                  folder: str | None = None,
                  recursive: bool = False,
-                 probe_on: bool | dict[Category, bool] = True,
+                 auto_probe: bool | dict[Category, bool] = False,
                  use_cache: bool | dict[Category, bool] = True,
                  managed_data: dict[Category, FileList] | None = None):
 
@@ -46,9 +52,12 @@ class Manager():
         folder = os.path.abspath(folder)
         os.chdir(folder)
         print('Chaning current working directory to', colored(folder, 'green'))
+        self.cache: dict[str, File] = self.cache_all.get(folder, dict())
+        print(f'Loaded {len(self.cache)} cached entries')
+        self.cwd = folder
 
         self.use_cache = use_cache
-        self.probe_on = probe_on
+        self.auto_probe = auto_probe
 
         if managed_data is None:
             self.data = {
@@ -143,7 +152,6 @@ class Manager():
             _dict.update(fl.folders)
 
         return _dict
-        
 
     def summary(self, cat: Category | None = None, compact=True):
         if cat is None:
@@ -199,9 +207,10 @@ class Manager():
         return 
 
     def _add_file(self, path_or_file, cat):
-        probe_on = (self.probe_on if isinstance(self.probe_on, bool)
-                    else self.probe_on.get(cat, True))
-        self.data[cat].add_file(path_or_file, probe_on=probe_on)
+        auto_probe = (
+            self.auto_probe if isinstance(self.auto_probe, bool)
+            else self.auto_probe.get(cat, True))
+        self.data[cat].add_file(path_or_file, auto_probe=auto_probe)
 
     def _add_file_from_cache(self, cache_dict, cat):
         self.data[cat].add_file_from_cache(cache_dict)
@@ -212,6 +221,12 @@ class Manager():
 
     def add_folder(self, path: str):
         raise NotImplementedError
+
+    def probe(self, verbose: bool = False):
+        for fl in self.data.values():
+            fl.probe(verbose=verbose)
+
+    # ----------------------------------
 
     def save_cache(self):
         """Save file list, the path is used as key"""
@@ -233,11 +248,12 @@ class Manager():
                 print(f'    - {key}')
              
         self.cache.update(_dict)
+        self.cache_all[self.cwd] = self.cache
 
         folder = os.path.dirname(CACHE_PKL)
         os.makedirs(folder, exist_ok=True)
         with open(CACHE_PKL, 'wb') as f:
-            pickle.dump(self.cache, f)
+            pickle.dump(self.cache_all, f)
 
         print(f'File cache saved successfully!')
 
