@@ -78,11 +78,19 @@ class FileList():
 
         self._add_file(f)
 
-    def probe(self, verbose: bool = False):
+    def probe(self, force: bool = False, verbose: bool = False):
         _iter = tqdm(self.filelist, desc='Probing metadata') if verbose else self.filelist
 
         for f in _iter:
-            f.probe()
+            f.probe(force=force, verbose=verbose)
+
+    @property
+    def unprobed(self):
+        return self.__class__(filelist=[f for f in self.filelist if not f.probed])
+
+    @property
+    def probed(self):
+        return self.__class__(filelist=[f for f in self.filelist if f.probed])
 
     def add_file_from_cache(self, _dict):
         self._add_file(self._file_type.from_dict(_dict))

@@ -26,34 +26,23 @@ CACHE_PKL = os.path.join(os.environ['HOME'], '.cache', 'my-file-organizer', 'cac
 
 class Manager():
 
-    cache_all: dict[str, dict[str, File]] = {}
+    cache_all: dict[str, dict] = {}
     if os.path.isfile(CACHE_PKL):
         with open(CACHE_PKL, 'rb') as f:
             cache_all = pickle.load(f)
             print(f'Found cache for {len(cache_all)} locations')
-            for folder in cache_all:
-                print(f'    - {folder}')
+            for k, v in cache_all.items():
+                print(f'    - {k} ({len(v)} entries)')
 
-    def __init__(self, *,
-                 folder: str | None = None,
+    def __init__(self, folder: str,
+                 *,
                  recursive: bool = False,
                  auto_probe: bool | dict[Category, bool] = False,
                  use_cache: bool | dict[Category, bool] = True,
                  managed_data: dict[Category, FileList] | None = None):
 
-        if folder is not None and managed_data is not None:
-            print('Both folder and managed_data is set, use managed_data by default')
-            folder = None
-
-        if folder is None and managed_data is None:
-            raise ValueError('Pleaes give at least a folder or managed_data')
-
-        assert folder is not None
         folder = os.path.abspath(folder)
         os.chdir(folder)
-        print('Chaning current working directory to', colored(folder, 'green'))
-        self.cache: dict[str, File] = self.cache_all.get(folder, dict())
-        print(f'Loaded {len(self.cache)} cached entries')
         self.cwd = folder
 
         self.use_cache = use_cache
@@ -75,6 +64,10 @@ class Manager():
     def __getitem__(self, cat: Category):
         """Aliast to by_cat"""
         return self.by_cat(cat)
+
+    @property
+    def cache(self) -> dict[str, dict]:
+        return self.cache_all.get(self.cwd, {})
 
     # Bunck of alias
     @property
@@ -111,13 +104,15 @@ class Manager():
         return self.data[cat]
 
     def by_mdate(self, date: dt.date):
-        return Manager(
+        return self.__class__(
+            self.cwd,
             managed_data={
                 key: val.by_mdate(date) for key, val in self.data.items()
             })
 
     def by_folder(self, folder_prefix):
-        return Manager(
+        return self.__class__(
+            self.cwd,
             managed_data={
                 key: val.by_folder(folder_prefix) for key, val in self.data.items()
             })
@@ -210,6 +205,7 @@ class Manager():
         auto_probe = (
             self.auto_probe if isinstance(self.auto_probe, bool)
             else self.auto_probe.get(cat, True))
+
         self.data[cat].add_file(path_or_file, auto_probe=auto_probe)
 
     def _add_file_from_cache(self, cache_dict, cat):
@@ -222,10 +218,26 @@ class Manager():
     def add_folder(self, path: str):
         raise NotImplementedError
 
-    def probe(self, verbose: bool = False):
+    def probe(self, force: bool = False, verbose: bool = False):
         for fl in self.data.values():
-            fl.probe(verbose=verbose)
+            fl.probe(force=force, verbose=verbose)
 
+    
+    @property
+    def probed(self):
+        return self.__class__(
+            self.cwd,
+            managed_data={
+                key: val.probed for key, val in self.data.items()
+            })
+
+    @property
+    def unprobed(self):
+        return self.__class__(
+            self.cwd,
+            managed_data={
+                key: val.unprobed for key, val in self.data.items()
+            })
     # ----------------------------------
 
     def save_cache(self):

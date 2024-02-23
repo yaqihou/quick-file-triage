@@ -75,11 +75,10 @@ class File():
         """Populate other meta info fields"""
         return
 
-    def probe(self, force: bool = False):
+    def probe(self, force: bool = False, verbose: bool = False):
         if force or not self.probed:
+            if verbose:  print(f'Probing for file {self.name}')
             self._probe()
-        else:
-            print(f'File {self.path} has already been probed, please pass force=True to fore a refresh')
     
     def update_path(self, new_path):
         self.path = new_path
