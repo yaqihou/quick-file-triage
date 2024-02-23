@@ -45,7 +45,7 @@ class FileList():
         for f in self.filelist:
             yield f.name
 
-    def path_iter(self):
+    def _path_iter(self):
         for f in self.filelist:
             yield f.path
 
@@ -194,14 +194,13 @@ class FileList():
             self._open(self._open_file_cmd_lst, top=top, random=random, path_lst=path_lst)
         else:
             raise NotImplementedError(f'Open file command not defined for class {self.__class__}')
-                
 
     def _get_pathlist_to_open(
             self,
             top: None | int = None,
             random: bool = False
     ) -> list[str]:
-        _lst = list(self.path_iter())[:top]
+        _lst = list(self._path_iter())[:top]
         if random:  shuffle(_lst)
         return _lst
 
@@ -443,7 +442,6 @@ class AudioFileList(FileList):
            summary_table[-1][1] += 1
 
         print(tabulate(summary_table))
-
 
     def _get_details_to_show(self, show_path, color):
         data_dict, total_dict = super()._get_details_to_show(show_path, color)

@@ -2,6 +2,7 @@
 
 # TODO - Add GUI / interface
 
+import abc
 import os
 import pickle
 from tqdm import tqdm
@@ -24,7 +25,8 @@ CACHE_PKL = os.path.join(os.environ['HOME'], '.cache', 'my-file-organizer', 'cac
 
 # TODO - create a base Manager to support multiple-purpose reuse
 
-class Manager():
+
+class ManagerBase(abc.ABC):
 
     cache_all: dict[str, dict] = {}
     if os.path.isfile(CACHE_PKL):
@@ -49,125 +51,19 @@ class Manager():
         self.auto_probe = auto_probe
 
         if managed_data is None:
-            self.data = {
-                Category.VIDEO: VideoFileList(),
-                Category.IMAGE: ImageFileList(),
-                Category.AUDIO: AudioFileList(),
-                Category.TXT: TXTFileList(),
-                Category.ZIP: ZIPFileList(),
-                Category.NA: FileList()
-            }
+            self.data = self._init_data()
             self._load(recursive=recursive)
         else:
             self.data = managed_data
-
-    def __getitem__(self, cat: Category):
-        """Aliast to by_cat"""
-        return self.by_cat(cat)
 
     @property
     def cache(self) -> dict[str, dict]:
         return self.cache_all.get(self.cwd, {})
 
-    # Bunck of alias
-    @property
-    def videos(self):
-        return self.by_cat(Category.VIDEO)
+    @abc.abstractmethod
+    def _init_data(self) -> dict:
+        """Return the empty data dictionary"""
 
-    @property
-    def images(self):
-        return self.by_cat(Category.IMAGE)
-
-    @property
-    def audios(self):
-        return self.by_cat(Category.AUDIO)
-
-    @property
-    def docs(self):
-        return self.by_cat(Category.TXT)
-
-    @property
-    def zips(self):
-        return self.by_cat(Category.ZIP)
-
-    @property
-    def other(self):
-        return self.by_cat(Category.NA)
-
-    def _by(self, key:  Category | dt.date, target: dict):
-        if key in target:
-            return FileList(filelist=target[key])
-        else:
-            raise ValueError(f"There are no files in given key: {key}")
-
-    def by_cat(self, cat: Category):
-        return self.data[cat]
-
-    def by_mdate(self, date: dt.date):
-        return self.__class__(
-            self.cwd,
-            managed_data={
-                key: val.by_mdate(date) for key, val in self.data.items()
-            })
-
-    def by_folder(self, folder_prefix):
-        return self.__class__(
-            self.cwd,
-            managed_data={
-                key: val.by_folder(folder_prefix) for key, val in self.data.items()
-            })
-
-    @need_confirm('Are you sure to organize all files automatically?')
-    def organize(self, verbose=False, dry_run=False):
-        for fl in self.data.values():
-            fl.organize(verbose=verbose, dry_run=dry_run)
-
-        if not dry_run:
-            self.save_cache_with_confirm()
-
-    @need_confirm('Are you sure to move all files to a single folder?')
-    def move_all_to(self, dst_folder, verbose=True, dry_run=False):
-        for fl in self.data.values():
-            fl.move_to(dst_folder, verbose=verbose, dry_run=dry_run)
-
-        if not dry_run:
-            self.save_cache_with_confirm()
-
-    @property
-    def mdates(self):
-        ret = []
-        for fl in self.data.values():
-            ret += fl.mdates
-        return list(sorted(ret))
-
-    @property
-    def folders(self):
-        _dict = {}
-        for fl in self.data.values():
-            _dict.update(fl.folders)
-
-        return _dict
-
-    def summary(self, cat: Category | None = None):
-        if cat is None:
-            _tot_len = 0
-            for fl in self.data.values():
-                fl.summary()
-                _tot_len += len(fl)
-            print('---------------')
-            print(f"Total file counts: {_tot_len}")
-        else:
-            self.data[cat].summary()
-
-    def _to_namelist(self, filelist: list[File]) -> list[str]:
-        return [f.name for f in filelist]
-
-    def play_all_video(self, random=False):
-        self.data[Category.VIDEO].open(random=random)
-
-    def play_all_image(self, random=False):
-        self.data[Category.IMAGE].open(random=random)
-            
     def _load(self, recursive: bool = False):
         """Load the initial folder content"""
 
@@ -228,7 +124,6 @@ class Manager():
     def _add_file_from_cache(self, cache_dict, cat):
         self.data[cat].add_file_from_cache(cache_dict)
 
-    # TODO - user interface to add file interactively
     def add_file(self, path: str):
         cat = Category.infer(os.path.basename(path))
         return self._add_file(path, cat)
@@ -242,28 +137,7 @@ class Manager():
         for path in tqdm(pathlist, desc=f"Adding folder"):
             self.add_file(path)
 
-    def probe(self, force: bool = False, verbose: bool = False):
-        for fl in self.data.values():
-            fl.probe(force=force, verbose=verbose)
-
-    
-    @property
-    def probed(self):
-        return self.__class__(
-            self.cwd,
-            managed_data={
-                key: val.probed for key, val in self.data.items()
-            })
-
-    @property
-    def unprobed(self):
-        return self.__class__(
-            self.cwd,
-            managed_data={
-                key: val.unprobed for key, val in self.data.items()
-            })
     # ----------------------------------
-
     def save_cache(self):
         """Save file list, the path is used as key"""
         _dict = {}
@@ -305,6 +179,156 @@ class Manager():
                     newv = _dict[key].get(kk, "")
                     print(' ' * 8 + f'{kk}: {oldv} -> {newv}')
                     
-             
+    # ----------------------------------
+    def _by(self, key:  Category | dt.date, target: dict):
+        if key in target:
+            return FileList(filelist=target[key])
+        else:
+            raise ValueError(f"There are no files in given key: {key}")
 
+    def by_cat(self, cat: Category):
+        return self.data[cat]
+
+    def by_mdate(self, date: dt.date):
+        return self.__class__(
+            self.cwd,
+            managed_data={
+                key: val.by_mdate(date) for key, val in self.data.items()
+            })
+
+    def by_folder(self, folder_prefix):
+        return self.__class__(
+            self.cwd,
+            managed_data={
+                key: val.by_folder(folder_prefix) for key, val in self.data.items()
+            })
+
+    @property
+    def mdates(self):
+        ret = []
+        for fl in self.data.values():
+            ret += fl.mdates
+        return list(sorted(ret))
+
+    @property
+    def folders(self):
+        _dict = {}
+        for fl in self.data.values():
+            _dict.update(fl.folders)
+
+        return _dict
+
+    # ----------------------------------
+    # Dates related alias
+    
+
+    # ----------------------------------
+    def probe(self, force: bool = False, verbose: bool = False):
+        for fl in self.data.values():
+            fl.probe(force=force, verbose=verbose)
+    
+    @property
+    def probed(self):
+        return self.__class__(
+            self.cwd,
+            managed_data={
+                key: val.probed for key, val in self.data.items()
+            })
+
+    @property
+    def unprobed(self):
+        return self.__class__(
+            self.cwd,
+            managed_data={
+                key: val.unprobed for key, val in self.data.items()
+            })
+
+    # ----------------------------------
+    def organize(self, verbose=False, dry_run=False):
+        if dry_run:
+            self._organize(verbose=verbose, dry_run=dry_run)
+        else:
+            self._organize_with_confirm(verbose=verbose, dry_run=dry_run)
+
+    def _organize(self, verbose=False, dry_run=False):
+        for fl in self.data.values():
+            fl.organize(verbose=verbose, dry_run=dry_run)
+
+        if not dry_run:
+            self.save_cache_with_confirm()
+
+    @need_confirm('Are you sure to organize all files automatically?')
+    def _organize_with_confirm(self, verbose=False, dry_run=False):
+        return self._organize(verbose=verbose, dry_run=False)
+
+    @need_confirm('Are you sure to move all files to a single folder?')
+    def move_all_to(self, dst_folder, verbose=True, dry_run=False):
+        for fl in self.data.values():
+            fl.move_to(dst_folder, verbose=verbose, dry_run=dry_run)
+
+        if not dry_run:
+            self.save_cache_with_confirm()
+
+    # ----------------------------------
+    def summary(self, cat: Category | None = None):
+        if cat is None:
+            _tot_len = 0
+            for fl in self.data.values():
+                fl.summary()
+                _tot_len += len(fl)
+            print('---------------')
+            print(f"Total file counts: {_tot_len}")
+        else:
+            self.data[cat].summary()
+
+
+class Manager(ManagerBase):
+
+    def _init_data(self):
+        return {
+            Category.VIDEO: VideoFileList(),
+            Category.IMAGE: ImageFileList(),
+            Category.AUDIO: AudioFileList(),
+            Category.TXT: TXTFileList(),
+            Category.ZIP: ZIPFileList(),
+            Category.NA: FileList()
+        }
+
+    def __getitem__(self, cat: Category):
+        """Aliast to by_cat"""
+        return self.by_cat(cat)
+
+    def __len__(self):
+        return sum(len(val) for val in self.data.values())
+
+    # Category alias
+    @property
+    def videos(self):
+        return self.by_cat(Category.VIDEO)
+
+    @property
+    def images(self):
+        return self.by_cat(Category.IMAGE)
+
+    @property
+    def audios(self):
+        return self.by_cat(Category.AUDIO)
+
+    @property
+    def docs(self):
+        return self.by_cat(Category.TXT)
+
+    @property
+    def zips(self):
+        return self.by_cat(Category.ZIP)
+
+    @property
+    def other(self):
+        return self.by_cat(Category.NA)
+
+    def play_all_video(self, random=False):
+        self.data[Category.VIDEO].open(random=random)
+
+    def play_all_image(self, random=False):
+        self.data[Category.IMAGE].open(random=random)
 
